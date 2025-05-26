@@ -1,6 +1,4 @@
-def main():
-    print("Hello, World!")
-
+from trainer import trainer
 
 if __name__ == "__main__":
-    main()
+    trainer()
