@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
+from typing import Optional
 
 from buffer.base_buff import IOPair
 
@@ -9,10 +10,10 @@ Task type to list of tuples where tuple[0] is the model answer and tuple[1] is t
 
 
 @dataclass
-class Answers:
-    abduction: tuple[str, str]
-    deduction: tuple[str, str]
-    induction: list[IOPair]
+class Answer:
+    input: Optional[str]
+    program: str
+    output: Optional[str]
 
 
 @dataclass
@@ -21,7 +22,7 @@ class Reward:
     correctness: float
 
 
-class Task(Enum):
+class TaskType(Enum):
     DEDUCTION = "DEDUCTION"
     ABDUCTION = "ABDUCTION"
     INDUCTION = "INDUCTION"

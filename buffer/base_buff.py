@@ -10,6 +10,7 @@ from buffer.abduction import AbductionBuffer
 from buffer.deduction import DeductionBuffer
 from buffer.induction import InductionBuffer
 from model.args import AZRArgs
+from types import TaskType
 
 
 @dataclass
@@ -19,12 +20,8 @@ class IOPair:
 
 
 @dataclass
-class Snippet:
-    snippet: str
-
-@dataclass
 class Sample:
-    snippet: Snippet
+    snippet: str
     function_io: list[IOPair]
     input_types: Literal["str", "int", "list", "tuple"]
     output_types: Literal["str", "int", "list", "tuple"]
@@ -50,7 +47,10 @@ class BaseBuffer:
     def sample_ids(self):
         return torch.cat([s.sample_ids for s in self.samples])
 
-    def sample(self):
+    def sample(self) -> Sample:
+        pass
+
+    def extend(self, sample: Sample):
         pass
 
 
@@ -60,6 +60,23 @@ class MegaBuffer:
     induction_buffer: InductionBuffer
     abduction_buffer: AbductionBuffer
     deduction_buffer: DeductionBuffer
+
+    def sample_from_buffer(self, buffer: TaskType, num_to_sample: int) -> list[Sample]:
+        samples = []
+        for i in range(num_to_sample):
+            if buffer == TaskType.INDUCTION:
+                sample = self.induction_buffer.sample()
+            elif buffer == TaskType.ABDUCTION:
+                sample = self.abduction_buffer.sample()
+            elif buffer == TaskType.DEDUCTION:
+                sample = self.deduction_buffer.sample()
+            else:
+                sample = self.seed_buffer.sample()
+
+            if sample is not None:
+                samples.append(sample)
+
+        return samples
 
     def sample_abduction_deduction(self) -> Sample:
         pass

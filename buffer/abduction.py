@@ -1,4 +1,4 @@
-from base_buff import BaseBuffer
+from base_buff import BaseBuffer, Sample
 
 
 class AbductionBuffer(BaseBuffer):

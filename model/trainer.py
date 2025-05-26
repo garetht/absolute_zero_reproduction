@@ -12,7 +12,9 @@ from jaxtyping import Float
 
 from buffer.base_buff import BaseBuffer, MegaBuffer, Sample, IOPair
 from model.args import AZRArgs
-from model.inference import generate_response
+from model.compute.reward import compute_r_total
+from model.inference import generate_response, generate_response_bulk
+from types import Answer, TaskType, Reward
 from utils.validate_by_executing import validate_by_executing_induction, validate_by_executing_deduction_abduction
 
 
@@ -26,7 +28,25 @@ def create_optimizer_and_scheduler() -> torch.optim.Optimizer:
     ...
 
 
-def format_sample(valid_pairs: list[IOPair]) -> Sample:
+def format_sample_from_io_pairs(valid_pairs: list[IOPair]) -> Sample:
+    pass
+
+
+def create_sample_from_answer(answer: Answer) -> Sample:
+    pass
+
+
+def extract_program_input_output(response: str, task_type: TaskType) -> Answer:
+    return extract_program_input_output_bulk([response], task_type)[0]
+
+def extract_program_input_output_bulk(responses: list[str], task_type: TaskType) -> list[Answer]:
+    pass
+
+def create_sample_from_answer(answer: Answer, task_type: TaskType) -> Sample:
+    pass
+
+
+def format_task_prompts(sample: list[Sample]) -> list[str]:
     pass
 
 
@@ -69,7 +89,7 @@ class AZRTrainer:
         Returns:
             Float[torch.Tensor, ""]: The computed objective value as a scalar tensor.
         """
-        ...
+        pass
 
     def rollout_phase(self) -> None:
         """
@@ -88,23 +108,44 @@ class AZRTrainer:
             io_pairs: list[IOPair] = self.generate_io_pairs(program, self.args.n_samples_to_estimate_task_accuracy)
             valid_pairs = validate_by_executing_induction(io_pairs)
 
-            sample = format_sample([io for (io, _) in valid_pairs])
+            sample = format_sample_from_io_pairs([io for (io, _) in valid_pairs])
             self.mega_buffer.induction_buffer.extend(sample)
 
+            abduction_reward, abduction_answer = self.propose_task(TaskType.ABDUCTION)
+            deduction_reward, deduction_answer = self.propose_task(TaskType.DEDUCTION)
 
-            sample1 = self.mega_buffer.sample_abduction_deduction()
-            deduction_prompt = self._format_for_deduction(sample1)
-            deduction_response = generate_response(self.args, self.training_model, self.tokenizer, deduction_prompt)
+            if abduction_answer is not None:
+                sample = create_sample_from_answer(abduction_answer)
+                self.mega_buffer.abduction_buffer.extend(sample)
 
-            sample2 = self.mega_buffer.sample_abduction_deduction()
-            abduction_prompt = self._format_for_abduction(sample2)
-            abduction_response = generate_response(self.args, self.training_model, self.tokenizer, abduction_prompt)
+            if deduction_answer is not None:
+                sample = create_sample_from_answer(deduction_answer)
+                self.mega_buffer.deduction_buffer.extend(sample)
 
-            valid_output = validate_by_executing_deduction_abduction({
-                "abduction": [abduction_response],
-                "deduction": [deduction_response],
-            })
+        all_rewards = torch.tensor((len(TaskType),))
+        for i, task_type in enumerate(TaskType):
+            samples: list[Sample] = self.mega_buffer.sample_from_buffer(task_type, self.args.train_batch_size)
+            task_prompts = format_task_prompts(samples)
+            responses = generate_response_bulk(self.args, self.training_model, self.tokenizer, task_prompts)
 
+            answers = extract_program_input_output_bulk(responses, task_type)
+            reward = compute_r_total(answers, samples)
+            all_rewards[i] = reward
+
+        # policy update
+
+
+    def propose_task(self, task_type: TaskType) -> tuple[Reward, Answer | None]:
+        sample = self.mega_buffer.sample_abduction_deduction()
+        prompt = self._format_for_abduction(sample)
+        response = generate_response(self.args, self.training_model, self.tokenizer, prompt)
+
+        answer = extract_program_input_output(response, task_type)
+        is_valid, reward = validate_by_executing_deduction_abduction(
+            answer
+        )
+
+        return reward, answer if is_valid else None
 
     def generate_io_pairs(self, program: Sample, num_io_pairs: int) -> list[IOPair]:
         induction_prompt = self._format_for_induction(program)
