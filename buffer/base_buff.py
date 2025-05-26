@@ -1,10 +1,14 @@
 from dataclasses import dataclass
-from typing import Literal
-from jaxtyping import Float, Int
+from typing_extensions import Literal
 
+from jaxtyping import Float, Int
+from torch import Tensor
 from transformers import AutoModelForCausalLM
 
-from torch import Tensor
+from buffer.abduction import AbductionBuffer
+from buffer.deduction import DeductionBuffer
+from buffer.induction import InductionBuffer
+from model.args import AZRArgs
 
 
 @dataclass
@@ -43,6 +47,18 @@ class BaseBuffer:
         self.values = values
         self.ref_logits = ref_logits
 
+    def extend(self):
+        pass
+
+@dataclass
+class MegaBuffer:
+    seed_buffer: BaseBuffer
+    induction_buffer: InductionBuffer
+    abduction_buffer: AbductionBuffer
+    deduction_buffer: DeductionBuffer
+
+    def extend(self):
+        pass
 
 def get_samples(
     model: AutoModelForCausalLM,
@@ -53,4 +69,4 @@ def get_samples(
     top_k: int,
     prepend_bos: bool,
 ) -> tuple[Int[Tensor, "batch seq_len"], list[Sample]]:
-    return
+    pass
