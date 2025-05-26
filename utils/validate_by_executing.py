@@ -1,9 +1,16 @@
-
-
+from buffer.base_buff import IOPair
 from types import Reward, Answers
 
 """
 Validates that the provided problem is correct python syntax, and that the input generates a determinstic answer. Outputs a dict containing the score for formatting and the score for correctness.
 """
-def validate_by_executing(answers: Answers) -> Reward:
+def validate_by_executing_induction(answers: list[IOPair]) -> list[tuple[IOPair, Reward]]:
+    """
+    Returns
+        valid IO pairs
+        rewards
+    """
+    pass
+
+def validate_by_executing_deduction_abduction(answers: Answers) -> Reward:
     pass

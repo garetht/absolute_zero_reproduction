@@ -1,16 +1,22 @@
-
+from dataclasses import dataclass
 from enum import Enum
+
+from buffer.base_buff import IOPair
+
 """
 Task type to list of tuples where tuple[0] is the model answer and tuple[1] is the ground truth answer
 """
-@dataclass
-class Answers():
-    abduction: list[tuple[str]]
-    deduction: list[tuple[str]]
-    induction: list[tuple[str]]
+
 
 @dataclass
-class Reward():
+class Answers:
+    abduction: tuple[str, str]
+    deduction: tuple[str, str]
+    induction: list[IOPair]
+
+
+@dataclass
+class Reward:
     formatting: float
     correctness: float
 
