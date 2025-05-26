@@ -3,7 +3,7 @@ name = "absolute-zero-reproduction"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = "==3.11.11"
 dependencies = [
     "accelerate==1.7.0",
     "aiohappyeyeballs==2.6.1",
@@ -70,6 +70,7 @@ dependencies = [
     "six==1.17.0",
     "smmap==5.0.2",
     "sympy==1.14.0",
+    "tabulate>=0.9.0",
     "tokenizers==0.21.1",
     "torch==2.7.0",
     "tqdm==4.67.1",
@@ -84,5 +85,5 @@ dependencies = [
     "wadler-lindig==0.1.6",
     "wandb==0.19.11",
     "xxhash==3.5.0",
-    "yarl==1.20.0"
+    "yarl==1.20.0",
 ]
