@@ -1,4 +1,4 @@
-from model.eval.problem import Problem
+from custom_types import Problem
 
 BOXED_NUMBER = """
 Provide your answer as a single boxed number within e.g. \[

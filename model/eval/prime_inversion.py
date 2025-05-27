@@ -1,6 +1,6 @@
 import random
 
-from model.eval.problem import Problem
+from custom_types import Problem
 
 
 def solve_modular_inverse(p: int, x=None, y=None, verbose: bool = False):

@@ -1,6 +1,6 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
-from typing_extensions import TypedDict
+from typing_extensions import TypedDict, Literal
 
 from typing import Generic, Literal, Optional, TypeVar
 from jaxtyping import Int
@@ -72,3 +72,53 @@ class ProblemResult(TypedDict):
     correct_answer: Optional[int]
     is_correct: bool
     time_seconds: float
+
+
+@dataclass
+class Problem:
+    prime: int
+    x: Optional[int]
+    y: Optional[int]
+    blank: Literal['x', 'y', 'p']
+    task_type: TaskType
+    # For reproducible display
+    desc: str = field(default='')
+
+    def __repr__(self) -> str:
+        """Return a nicely formatted string representation of the problem."""
+        if self.blank == 'x':
+            return f"Find x such that x * {self.y} ≡ 1 (mod {self.prime}) [x = {self.x}]"
+        elif self.blank == 'y':
+            return f"Find y such that {self.x} * y ≡ 1 (mod {self.prime}) [y = {self.y}]"
+        else:
+            return f"Find a p such that {self.x} * {self.y} ≡ 1 (mod p) [p = {self.prime}]"
+
+
+    @staticmethod
+    def from_prime_sample(prime_sample: PrimeSample, task_type: TaskType) -> 'Problem':
+        match task_type:
+            case TaskType.ABDUCTION:
+                blank = 'x'
+            case TaskType.DEDUCTION:
+                blank = 'y'
+            case TaskType.INDUCTION:
+                blank = 'p'
+
+        return Problem(
+            prime=prime_sample.prime,
+            x=prime_sample.function_io[0].input_str,
+            y=prime_sample.function_io[0].output_str,
+            blank=blank,
+            task_type=task_type
+        )
+
+
+class EvaluationResults(TypedDict):
+    model: str
+    correct: int
+    no_response: int
+    total: int
+    timestamp: str
+    problem_results: list[ProblemResult]
+    total_eval_time_seconds: float
+    accuracy: float

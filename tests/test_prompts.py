@@ -1,5 +1,5 @@
 import pytest
-from model.eval.problem import Problem
+from custom_types import Problem
 from model.eval.prompts import create_prompt
 
 

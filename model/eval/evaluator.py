@@ -7,8 +7,7 @@ from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from typing import List, Dict, Any, Optional
 
-from custom_types import ProblemResult
-from model.eval.problem import Problem
+from custom_types import ProblemResult, Problem, EvaluationResults
 from model.eval.prompts import create_prompt
 
 
@@ -104,9 +103,10 @@ class Evaluator:
         current_overall_accuracy = overall_correct / total_processed
         current_responded_accuracy = overall_correct / (total_processed - no_responses)
 
-        print(f"📊 Overall progress: {overall_correct}/{total_processed} correct ({current_overall_accuracy:.1%}) ({current_responded_accuracy:.1%} of responded)")
+        print(
+            f"📊 Overall progress: {overall_correct}/{total_processed} correct ({current_overall_accuracy:.1%}) ({current_responded_accuracy:.1%} of responded)")
 
-    def _print_final_results(self, results: Dict[str, Any], total_eval_time: float, num_problems: int):
+    def _print_final_results(self, results: EvaluationResults, total_eval_time: float, num_problems: int):
         """Print final evaluation results."""
         print(f"\n🎯 Evaluation completed!")
         print(f"📊 Final Results:")
@@ -135,63 +135,57 @@ class Evaluator:
         else:
             return None
 
-    def evaluate(self, problems: List[Problem], eval_start_time: float = None) -> Dict[str, Any]:
+    def evaluate(self, problems: List[Problem], eval_start_time: float = None) -> EvaluationResults:
         """Run evaluation on the given problems."""
         if eval_start_time is None:
             eval_start_time = time.time()
 
-        results = {
+        results: EvaluationResults = {
             "model": self.model_name,
             "correct": 0,
             "no_response": 0,
             "total": len(problems),
             "timestamp": datetime.now().isoformat(),
-            "problems": [],
-            "total_eval_time_seconds": 0.0
+            "problem_results": [],
+            "total_eval_time_seconds": 0.0,
+            "accuracy": 0.0,
         }
 
         # Calculate total number of batches for progress tracking
         total_batches = (len(problems) + self.batch_size - 1) // self.batch_size
 
         # Process problems in batches with progress bar
-        with tqdm(total=len(problems), desc="Evaluating problems", unit="problem") as pbar:
-            for batch_idx, i in enumerate(range(0, len(problems), self.batch_size)):
-                batch_problems = problems[i:i + self.batch_size]
+        for batch_idx, i in enumerate(range(0, len(problems), self.batch_size)):
+            batch_problems = problems[i:i + self.batch_size]
 
-                batch_outputs, batch_prompts, batch_time = self._process_batch(
-                    batch_problems, batch_idx, total_batches
+            batch_outputs, batch_prompts, batch_time = self._process_batch(
+                batch_problems, batch_idx, total_batches
+            )
+
+            # Process each result in the batch
+            batch_correct = 0
+            for j, (problem, outputs) in enumerate(zip(batch_problems, batch_outputs)):
+                problem_result = self._process_problem_result(
+                    problem, outputs, batch_prompts[j], batch_time, len(batch_problems)
                 )
 
-                # Process each result in the batch
-                batch_correct = 0
-                for j, (problem, outputs) in enumerate(zip(batch_problems, batch_outputs)):
-                    problem_result = self._process_problem_result(
-                        problem, outputs, batch_prompts[j], batch_time, len(batch_problems)
-                    )
+                if problem_result["is_correct"]:
+                    results["correct"] += 1
+                    batch_correct += 1
 
-                    if problem_result["is_correct"]:
-                        results["correct"] += 1
-                        batch_correct += 1
-                    if problem_result["extracted_answer"] is None:
-                        results["no_response"] += 1
+                if problem_result["extracted_answer"] is None:
+                    results["no_response"] += 1
 
-                    results["problems"].append(problem_result)
+                results["problem_results"].append(problem_result)
 
-                    # Update progress bar
-                    pbar.update(1)
+                # Update progress bar description with current accuracy
+                current_accuracy = results["correct"] / len(results["problem_results"])
 
-                    # Update progress bar description with current accuracy
-                    current_accuracy = results["correct"] / len(results["problems"])
-                    pbar.set_postfix({
-                        'accuracy': f'{current_accuracy:.1%}',
-                        'correct': f'{results["correct"]}/{len(results["problems"])}'
-                    })
-
-                # Print batch summary
-                self._print_batch_summary(
-                    batch_idx, batch_correct, len(batch_problems), results["no_response"],
-                    results["correct"], len(results["problems"])
-                )
+            # Print batch summary
+            self._print_batch_summary(
+                batch_idx, batch_correct, len(batch_problems), results["no_response"],
+                results["correct"], len(results["problem_results"])
+            )
 
         eval_end_time = time.time()
         total_eval_time = eval_end_time - eval_start_time
@@ -207,7 +201,7 @@ class Evaluator:
 
 
 def evaluate_model_from_name(model_name: str, problems: List[Problem], max_new_tokens: int = 100,
-                             batch_size: int = 1) -> Dict[str, Any]:
+                             batch_size: int = 1) -> EvaluationResults:
     """
     Evaluates a language model on a set of programming problems by loading the model
     from its name.
@@ -240,7 +234,7 @@ def evaluate_model_from_name(model_name: str, problems: List[Problem], max_new_t
 
 def evaluate_model(model: AutoModelForCausalLM, tokenizer: AutoTokenizer, problems: List[Problem],
                    max_new_tokens: int = 100,
-                   batch_size: int = 1) -> Dict[str, Any]:
+                   batch_size: int = 1) -> EvaluationResults:
     """
     Evaluates a language model on a set of programming problems using an actual model and tokenizer
 

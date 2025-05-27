@@ -2,10 +2,9 @@ import argparse
 import random
 from typing import Any
 
-from custom_types import PrimeSample
+from custom_types import PrimeSample, Problem, EvaluationResults
 from model.eval.evaluator import evaluate_model_from_name, evaluate_model
 from model.eval.prime_inversion import generate_problems, PRIMES
-from model.eval.problem import Problem
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 
@@ -14,7 +13,7 @@ def run_baseline_evaluation_prime_samples(model: AutoModelForCausalLM,
                                           prime_samples: list[PrimeSample],
                                           max_new_tokens: int = 100,
                                           batch_size: int = 1,
-                                          seed: int = 42) -> dict[str, Any]:
+                                          seed: int = 42) -> EvaluationResults:
     """
     This function takes prime samples and then performs baseline evaluation using the specified model
      and parameters. The conversion process involves selecting either 'x' or 'y' as the variable
@@ -41,7 +40,7 @@ def run_baseline_evaluation_random_problems(model_name: str,
                                             last_prime_index: int = 20,
                                             max_new_tokens: int = 100,
                                             batch_size: int = 1,
-                                            seed: int = 42) -> dict[str, Any]:
+                                            seed: int = 42) -> EvaluationResults:
     """
     Executes baseline evaluation on a language model using randomly generated
     mathematical problems within a specified range of prime numbers. This function
