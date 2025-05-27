@@ -7,15 +7,16 @@ rollout phases, learning phases, and objective computation.
 """
 
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
-from jaxtyping import Float
+from transformers import AutoModelForCausalLM
+from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
+from jaxtyping import Float, Int
 
-from buffer.base_buff import BaseBuffer, MegaBuffer, BaseSample, IOPair
+from buffer.base_buff import BaseBuffer, MegaBuffer, 
 from model.args import AZRArgs
 from model.compute.advantages import compute_advantages
 from model.compute.reward import compute_r_total
 from model.inference import generate_response, generate_response_bulk
-from custom_types import Answer, TaskType, Role
+from custom_types import Answer, TaskType, Role, BaseSample, IOPair
 from utils.validate_by_executing import validate_by_executing_induction, validate_by_executing_deduction_abduction
 from utils.string_formatting import format_task_prompts, format_for_abduction, format_for_induction
 
@@ -63,9 +64,9 @@ class AZRTrainer:
     training_model: AutoModelForCausalLM
     mega_buffer: MegaBuffer
     step: int
-    tokenizer: AutoTokenizer
+    tokenizer: PreTrainedTokenizerFast
 
-    def __init__(self, args: AZRArgs, mega_buffer: MegaBuffer, tokenizer: AutoTokenizer,
+    def __init__(self, args: AZRArgs, mega_buffer: MegaBuffer, tokenizer: PreTrainedTokenizerFast,
                  training_model: AutoModelForCausalLM):
         """
         Initialize the AZR trainer with models and configuration.
@@ -81,7 +82,7 @@ class AZRTrainer:
         self.mega_buffer = mega_buffer
         self.step = 0
 
-    def compute_azr_objective(self, advantages: Float[torch.tensor, "task batch_size"]) -> Float[torch.Tensor, ""]:
+    def compute_azr_objective(self, advantages: Float[torch.Tensor, "task batch_size"], new_logprobs: Float[torch.Tensor, "role task minibatch_size seq_len vocab_size"], new_sample_ids:  Int[torch.Tensor, "role task minibatch_size seq_len"] ) -> Float[torch.Tensor, ""]:
         """
         Compute the AZR training objective.
         
@@ -165,6 +166,8 @@ class AZRTrainer:
             # one reward per task type per batch item
             for j, role in enumerate(Role):
                 # we want to pass proposer_format rewards and samples, from which we can compute r_solve
+                # TODO - compute formatting rewards for the solver response before rtotal?
+                # ie convert response to answer objects (which store the formatting reward)
                 all_rewards[j][i] = compute_r_total(samples, responses, role, r_format_proposer)
          
         return all_rewards  # shape: (role, task, batch_size)
@@ -179,19 +182,20 @@ class AZRTrainer:
                 prompt = format_for_induction(sample)
             case _:
                 raise ValueError(f"Unsupported task type in propose_task: {task_type}")
-        response, logprobs = generate_response(self.args, self.training_model, self.tokenizer, prompt)
-    
+        response, logprobs, _, prompt_tokens = generate_response(self.args, self.training_model, self.tokenizer, prompt)
+        sample.prompt_tokens = prompt_tokens
         return response, logprobs
 
 
     def generate_io_pairs(self, program: BaseSample, num_io_pairs: int) -> tuple[list[IOPair], Float[torch.Tensor, "seq_len vocab"]]:
         induction_prompt = format_for_induction(program, num_io_pairs)
-        response, logprobs = generate_response(self.args, self.training_model, self.tokenizer, induction_prompt)
+        response, logprobs, _, prompt_tokens = generate_response(self.args, self.training_model, self.tokenizer, induction_prompt)
         io_pairs = extract_io_pairs_from_string(response, num_io_pairs)
+        program.prompt_tokens = prompt_tokens
         return io_pairs, logprobs
 
    
-    def learning_phase(self, buffer: BaseBuffer) -> None:
+    def learning_phase(self) -> None:
         """
         Execute the learning phase of AZR training.
         
@@ -201,13 +205,19 @@ class AZRTrainer:
         Args:
             buffer (Buffer): Buffer containing rollout data to learn from.
         """        
-        for i in range(self.args.n_rollouts):
-            all_rewards = self.rollout_phase()
-            # now do minibatch policy updates
-            for mini_batch in range(self.args.n_minibatches):
-                # TODO : store logits during rollout and here as well
-                advantages = compute_advantages(self.args, all_rewards) # shape task batch_size
-                objective = self.compute_azr_objective(advantages)
-                self.optimizer.zero_grad()
-                objective.backward()
-                self.optimizer.step()
+        
+        all_rewards = self.rollout_phase()
+        # now do minibatch policy updates
+        for mini_batch in self.mega_buffer.get_minibatches(self.args):
+            # first do a forward pass on current policy to get the logprobs used in importance ratio
+            # get the prompts that we need to use for the forawrd
+            prompts = [self.tokenizer.decode(s.prompt_tokens, skip_special_tokens=True) for s in mini_batch.samples]
+            _, logprobs, sample_ids, _ = generate_response_bulk(
+                self.args, self.training_model, self.tokenizer, prompts
+            )
+            advantages = compute_advantages(self.args, all_rewards) # shape task batch_size
+            objective = self.compute_azr_objective(advantages, logprobs, sample_ids)
+            self.optimizer.zero_grad()
+            objective.backward()
+            torch.nn.utils.clip_grad_norm_(self.training_model.parameters(), self.args.max_grad_norm)
+            self.optimizer.step()
