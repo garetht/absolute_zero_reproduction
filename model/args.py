@@ -18,7 +18,6 @@ class AZRArgs:
     # Duration of different phases
     total_phases: int = 100
     batch_size: int = 128
-    batches_per_learning_phase: int = 2
 
     # Optimization hyperparameters
     max_grad_norm: float = 1.0
@@ -55,3 +54,4 @@ class AZRArgs:
     n_minibatches: int = 16
     minibatch_size: int = 8
     batch_size = minibatch_size*n_minibatches
+    d_vocab: int = 50257  # Default for GPT-2 and similar models
