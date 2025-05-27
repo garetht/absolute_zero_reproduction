@@ -7,7 +7,7 @@ from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from typing import List, Dict, Any, Optional
 
-from model.eval.prime_inversion import Problem
+from model.eval.problem import Problem
 from model.eval.prompts import create_prompt
 
 

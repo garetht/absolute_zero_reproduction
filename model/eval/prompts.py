@@ -1,4 +1,4 @@
-from model.eval.prime_inversion import Problem
+from model.eval.problem import Problem
 
 X_PROMPT = """<|im_start|>user
 Given a prime number p and an integer y, find x such that:
