@@ -77,7 +77,7 @@ class Evaluator:
             is_correct = (extracted_answer % problem.prime) == (correct_answer % problem.prime)
 
         print(
-            f"""{"Correct" if is_correct else "Wrong"} Problem {problem}, Model Response {extracted_answer}, Correct Answer {correct_answer}""")
+            f"""{"✅" if is_correct else "⛔"} | Problem {problem} | Model Response {extracted_answer}""")
 
         return {
             "problem": problem.desc,

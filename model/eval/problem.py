@@ -18,11 +18,11 @@ class Problem:
     def __repr__(self) -> str:
         """Return a nicely formatted string representation of the problem."""
         if self.blank == 'x':
-            return f"Find x such that x * {self.y} ≡ 1 (mod {self.prime})"
+            return f"Find x such that x * {self.y} ≡ 1 (mod {self.prime}) [x = {self.x}]"
         elif self.blank == 'y':
-            return f"Find y such that {self.x} * y ≡ 1 (mod {self.prime})"
+            return f"Find y such that {self.x} * y ≡ 1 (mod {self.prime}) [y = {self.y}]"
         else:
-            return f"Find a p such that {self.x} * y ≡ 1 (mod {self.prime})"
+            return f"Find a p such that {self.x} * {self.y} ≡ 1 (mod p) [p = {self.prime}]"
 
 
     def to_prime_sample(self) -> PrimeSample:
