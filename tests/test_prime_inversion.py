@@ -1,5 +1,5 @@
 import pytest
-from model.eval.prime_inversion import solve_modular_inverse, generate_problems, PRIMES
+from model.eval.prime_inversion import solve_modular_inverse, generate_problems, PRIMES, is_prime
 
 
 @pytest.mark.parametrize(
@@ -20,3 +20,15 @@ def test_modular_inverse_problem(prob):
         assert computed_y == prob.y, (
             f"Wanted y={prob.y}, got {computed_y} (p={prob.prime}, x={prob.x})"
         )
+
+
+class TestIsPrime:
+    @pytest.mark.parametrize(
+        "number,expected",
+        [
+            (num, num in PRIMES)
+            for num in range(2, PRIMES[-1] + 1)
+        ]
+    )
+    def test_is_prime_parametrized(self, number, expected):
+        assert is_prime(number) is expected

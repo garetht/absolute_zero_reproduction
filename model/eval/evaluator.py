@@ -8,6 +8,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from typing import List, Dict, Any, Optional
 
 from custom_types import ProblemResult, Problem, EvaluationResults
+from model.eval.prime_inversion import is_prime
 from model.eval.prompts import create_prompt
 
 
@@ -77,7 +78,7 @@ class Evaluator:
         if extracted_answer is not None:
             # Check if answers are equivalent modulo prime
             if problem.blank == 'p':
-                is_correct = (problem.x * problem.y) % extracted_answer == 1
+                is_correct = (problem.x * problem.y) % extracted_answer == 1 and is_prime(extracted_answer)
             else:
                 is_correct = (extracted_answer % problem.prime) == (correct_answer % problem.prime)
 
