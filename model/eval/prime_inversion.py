@@ -72,11 +72,8 @@ def generate_problems(n: int, primes: list[int], seed: int = 42) -> list[Problem
         p = r.choice(primes)
         x = r.randint(1, p - 1)
         y = modular_inverse(x, p)
-        blank = r.choice(['x', 'y'])
-        if blank == 'x':
-            prob = Problem(prime=p, x=x, y=y, blank='x', desc=f"Find x given y={y}, p={p}")
-        else:
-            prob = Problem(prime=p, x=x, y=y, blank='y', desc=f"Find y given x={x}, p={p}")
+        blank = r.choice(['x', 'y', 'p'])
+        prob = Problem(prime=p, x=x, y=y, blank=blank)
         problems.append(prob)
     return problems
 

@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 from typing_extensions import Literal
 
-from custom_types import PrimeSample
+from custom_types import PrimeSample, TaskType
 
 
 @dataclass
@@ -11,7 +11,7 @@ class Problem:
     prime: int
     x: Optional[int]
     y: Optional[int]
-    blank: Literal['x', 'y']
+    blank: Literal['x', 'y', 'p']
     # For reproducible display
     desc: str = field(default='')
 
@@ -19,8 +19,10 @@ class Problem:
         """Return a nicely formatted string representation of the problem."""
         if self.blank == 'x':
             return f"Find x such that x * {self.y} ≡ 1 (mod {self.prime})"
-        else:
+        elif self.blank == 'y':
             return f"Find y such that {self.x} * y ≡ 1 (mod {self.prime})"
+        else:
+            return f"Find a p such that {self.x} * y ≡ 1 (mod {self.prime})"
 
 
     def to_prime_sample(self) -> PrimeSample:
@@ -34,7 +36,15 @@ class Problem:
         )
 
     @staticmethod
-    def from_prime_sample(prime_sample: PrimeSample, blank: Literal['x', 'y']) -> 'Problem':
+    def from_prime_sample(prime_sample: PrimeSample, task_type: TaskType) -> 'Problem':
+        match task_type:
+            case TaskType.ABDUCTION:
+                blank = 'x'
+            case TaskType.DEDUCTION:
+                blank = 'y'
+            case TaskType.INDUCTION:
+                blank = 'p'
+
         return Problem(
             prime=prime_sample.prime,
             x=prime_sample.function_io[0].input_str,
