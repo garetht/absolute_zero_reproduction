@@ -74,7 +74,10 @@ class Evaluator:
         is_correct = False
         if extracted_answer is not None:
             # Check if answers are equivalent modulo prime
-            is_correct = (extracted_answer % problem.prime) == (correct_answer % problem.prime)
+            if problem.blank == 'p':
+                is_correct = (problem.x * problem.y) % extracted_answer == 1
+            else:
+                is_correct = (extracted_answer % problem.prime) == (correct_answer % problem.prime)
 
         print(
             f"""{"✅" if is_correct else "⛔"} | Problem {problem} | Model Response {extracted_answer}""")
