@@ -109,7 +109,7 @@ class AZRTrainer:
             program = self.mega_buffer.sample_abduction_deduction()
             
             # INDUCTION
-            io_pairs, induction_logprobs = self.generate_io_pairs(program, self.args.n_samples_to_estimate_task_accuracy)
+            io_pairs, induction_logprobs, induction_sample_ids = self.generate_io_pairs(program, self.args.n_samples_to_estimate_task_accuracy)
             valid_pairs, induct_proposer_format_reward = validate_by_executing_induction(io_pairs)
             
 
@@ -117,8 +117,8 @@ class AZRTrainer:
             self.mega_buffer.seed_buffer.append(sample)
 
             # ABDUCTION and DEDUCTION
-            abduction_response, abduction_logprobs = self.propose_task(TaskType.ABDUCTION)
-            deduction_response, deduction_logprobs = self.propose_task(TaskType.DEDUCTION)
+            abduction_response, abduction_logprobs, abduction_sample_ids = self.propose_task(TaskType.ABDUCTION)
+            deduction_response, deduction_logprobs, deduction_sample_ids = self.propose_task(TaskType.DEDUCTION)
             
             # validate the responses have correct formatting, and run,  create answer objects during this proccess 
             abduction_answer = validate_formatting_and_correctness(abduction_response, TaskType.ABDUCTION)
@@ -145,22 +145,26 @@ class AZRTrainer:
                         self.mega_buffer.logprobs[0, idx, i, ...] = abduction_logprobs
                         # write the rewards to proposer_format_correctness_rewards
                         proposer_format_correctness_rewards[idx, i] = abduction_answer.reward
+                        self.mega_buffer.sample_ids[0, idx, i, ...] = abduction_sample_ids
                     case TaskType.DEDUCTION:
                         self.mega_buffer.logprobs[0, idx, i, ...] = deduction_logprobs
                         proposer_format_correctness_rewards[idx, i] = deduction_answer.reward
+                        self.mega_buffer.sample_ids[0, idx, i, ...] = deduction_sample_ids
                     case TaskType.INDUCTION:
                         self.mega_buffer.logprobs[0, idx, i, ...] = induction_logprobs
                         proposer_format_correctness_rewards[idx, i] = induct_proposer_format_reward
+                        self.mega_buffer.sample_ids[0, idx, i, ...] = induction_sample_ids
 
         # SOLVE PROBLEMS
         for i, task_type in enumerate(TaskType):
             samples: list[BaseSample] = self.mega_buffer.solver_sample_from_buffer(self.args.train_batch_size)
             task_prompts = format_task_prompts(samples,task_type)
-            responses, logprobs = generate_response_bulk(self.args, self.training_model, self.tokenizer, task_prompts)
+            responses, logprobs, sample_ids, prompt_ids = generate_response_bulk(self.args, self.training_model, self.tokenizer, task_prompts)
             # write logprobs to the mega buffer
             # megabuffer.logprobs shape : (role task batch_size seq_len vocab_size)
             # logprobs obj shape (batchsize seq_len vocab_size)
             self.mega_buffer.logprobs[1, i, ...] = logprobs
+            self.mega_buffer.sample_ids[1, i, ...] = sample_ids
             r_format_proposer = proposer_format_correctness_rewards[i, ...]  # shape: (batch_size)
             # compute rewards
             # one reward per task type per batch item
@@ -173,7 +177,7 @@ class AZRTrainer:
         return all_rewards  # shape: (role, task, batch_size)
 
 
-    def propose_task(self, task_type: TaskType) -> tuple[str, Float[torch.Tensor, "seq_len vocab"]]:
+    def propose_task(self, task_type: TaskType) -> tuple[str, Float[torch.Tensor, "seq_len vocab"], Int[torch.Tensor, "seq_len"]]
         sample = self.mega_buffer.sample_abduction_deduction()
         match task_type:
             case TaskType.ABDUCTION:
@@ -182,17 +186,17 @@ class AZRTrainer:
                 prompt = format_for_induction(sample)
             case _:
                 raise ValueError(f"Unsupported task type in propose_task: {task_type}")
-        response, logprobs, _, prompt_tokens = generate_response(self.args, self.training_model, self.tokenizer, prompt)
+        response, logprobs, sample_ids, prompt_tokens = generate_response(self.args, self.training_model, self.tokenizer, prompt)
         sample.prompt_tokens = prompt_tokens
-        return response, logprobs
+        return response, logprobs, sample_ids
 
 
-    def generate_io_pairs(self, program: BaseSample, num_io_pairs: int) -> tuple[list[IOPair], Float[torch.Tensor, "seq_len vocab"]]:
+    def generate_io_pairs(self, program: BaseSample, num_io_pairs: int) -> tuple[list[IOPair], Float[torch.Tensor, "seq_len vocab"], Int[torch.Tensor, "seq_len"]]:
         induction_prompt = format_for_induction(program, num_io_pairs)
-        response, logprobs, _, prompt_tokens = generate_response(self.args, self.training_model, self.tokenizer, induction_prompt)
+        response, logprobs, sample_ids, prompt_tokens = generate_response(self.args, self.training_model, self.tokenizer, induction_prompt)
         io_pairs = extract_io_pairs_from_string(response, num_io_pairs)
         program.prompt_tokens = prompt_tokens
-        return io_pairs, logprobs
+        return io_pairs, logprobs, sample_ids
 
    
     def learning_phase(self) -> None:
