@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
 from jaxtyping import Int
+import numpy
 from torch import Tensor
 import torch
 from transformers import AutoModelForCausalLM
@@ -9,7 +10,7 @@ from buffer.abduction import AbductionBuffer
 from buffer.deduction import DeductionBuffer
 from buffer.induction import InductionBuffer
 from model.args import AZRArgs
-from custom_types import TaskType, Sample
+from custom_types import TaskType, BaseSample
 
 
 
@@ -23,7 +24,7 @@ class BaseBuffer:
     def __init__(
             self,
             args: AZRArgs,
-            samples: list[Sample],
+            samples: list[BaseSample],
     ):
         self.args = args
         self.samples = samples
@@ -31,48 +32,36 @@ class BaseBuffer:
     def sample_ids(self):
         return torch.cat([s.sample_ids for s in self.samples])
 
-    def sample(self) -> Sample:
+    def sample(self) -> BaseSample:
         pass
 
-    def extend(self, sample: Sample):
+    def extend(self, sample: BaseSample):
         pass
 
 
 @dataclass
 class MegaBuffer:
-    seed_buffer: BaseBuffer
-    induction_buffer: InductionBuffer
-    abduction_buffer: AbductionBuffer
-    deduction_buffer: DeductionBuffer
+    seed_buffer: list[BaseSample]
     logprobs: Int[Tensor, "role task batch_size vocab_size"]
     sample_ids: Int[Tensor, "role task batch_size seq_len"]
-    # TODO
+    # batch_size is the index of the sample in the buffer, same for any role task combo
+    buffer: list[BaseSample]
     def get_minibatch(): 
-
-    def sample_from_buffer(self, buffer: TaskType, num_to_sample: int) -> list[Sample]:
-        samples = []
-        for i in range(num_to_sample):
-            if buffer == TaskType.INDUCTION:
-                sample = self.induction_buffer.sample()
-            elif buffer == TaskType.ABDUCTION:
-                sample = self.abduction_buffer.sample()
-            elif buffer == TaskType.DEDUCTION:
-                sample = self.deduction_buffer.sample()
-            else:
-                sample = self.seed_buffer.sample()
-
-            if sample is not None:
-                samples.append(sample)
-
-        return samples
-
-    def sample_abduction_deduction(self) -> Sample:
+        # looks at the buffer from the current rollout, returns samples indexed using their position in the batch
         pass
 
-    def sample_abduction(self) -> Sample:
+    def solver_sample_from_buffer(self, num_to_sample: int) -> list[BaseSample]:
+        indices = numpy.random.choice(len(self.seed_buffer), num_to_sample, replace=True)
+        return [self.seed_buffer[i] for i in indices]
+
+
+    def sample_abduction_deduction(self) -> BaseSample:
         pass
 
-    def sample_deduction(self) -> Sample:
+    def sample_abduction(self) -> BaseSample:
+        pass
+
+    def sample_deduction(self) -> BaseSample:
         pass
 
 
@@ -84,5 +73,5 @@ def get_samples(
         temperature: float,
         top_k: int,
         prepend_bos: bool,
-) -> tuple[Int[Tensor, "batch seq_len"], list[Sample]]:
+) -> tuple[Int[Tensor, "batch seq_len"], list[BaseSample]]:
     pass

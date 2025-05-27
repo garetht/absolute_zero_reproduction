@@ -10,7 +10,7 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from jaxtyping import Float
 
-from buffer.base_buff import BaseBuffer, MegaBuffer, Sample, IOPair
+from buffer.base_buff import BaseBuffer, MegaBuffer, BaseSample, IOPair
 from model.args import AZRArgs
 from model.compute.advantages import compute_advantages
 from model.compute.reward import compute_r_total
@@ -30,13 +30,13 @@ def create_optimizer_and_scheduler() -> torch.optim.Optimizer:
     ...
 
 
-def format_sample_from_io_pairs(valid_pairs_and_rewards: list[IOPair]) -> Sample:
+def format_sample_from_io_pairs(valid_pairs_and_rewards: list[IOPair]) -> BaseSample:
     pass
 
 def extract_io_pairs_from_string(response: str) -> IOPair:
     pass
 
-def create_sample_from_answer(answer: Answer) -> Sample:
+def create_sample_from_answer(answer: Answer) -> BaseSample:
     pass
 
 
@@ -46,7 +46,7 @@ def extract_program_input_output(response: str, task_type: TaskType) -> tuple[An
 def extract_program_input_output_bulk(responses: list[str], task_type: TaskType) -> list[tuple[Answer, Reward]]:
     pass
 
-def create_sample_from_answer(answer: Answer, task_type: TaskType) -> Sample:
+def create_sample_from_answer(answer: Answer, task_type: TaskType) -> BaseSample:
     pass
 
 
@@ -115,7 +115,7 @@ class AZRTrainer:
             
 
             sample = format_sample_from_io_pairs([io for io in valid_pairs])
-            self.mega_buffer.induction_buffer.extend(sample)
+            self.mega_buffer.seed_buffer.append(sample)
 
             # ABDUCTION and DEDUCTION
             abduct_proposer_format_reward, abduction_answer = self.propose_task(TaskType.ABDUCTION)
@@ -123,15 +123,15 @@ class AZRTrainer:
 
             if abduction_answer is not None:
                 sample = create_sample_from_answer(abduction_answer, TaskType.ABDUCTION)
-                self.mega_buffer.abduction_buffer.extend(sample)
+                self.mega_buffer.seed_buffer.append(sample)
 
             if deduction_answer is not None:
                 sample = create_sample_from_answer(deduction_answer, TaskType.DEDUCTION)
-                self.mega_buffer.deduction_buffer.extend(sample)
+                self.mega_buffer.seed_buffer.append(sample)
 
         
         for i, task_type in enumerate(TaskType):
-            samples: list[Sample] = self.mega_buffer.sample_from_buffer(task_type, self.args.train_batch_size)
+            samples: list[BaseSample] = self.mega_buffer.solver_sample_from_buffer(self.args.train_batch_size)
             task_prompts = format_task_prompts(samples,task_type)
             responses = generate_response_bulk(self.args, self.training_model, self.tokenizer, task_prompts)
 
@@ -163,7 +163,7 @@ class AZRTrainer:
 
         return reward, answer if is_valid else None
 
-    def generate_io_pairs(self, program: Sample, num_io_pairs: int) -> list[IOPair]:
+    def generate_io_pairs(self, program: BaseSample, num_io_pairs: int) -> list[IOPair]:
         induction_prompt = format_for_induction(program)
 
         responses = []
