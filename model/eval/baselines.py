@@ -17,22 +17,25 @@ from model.eval.test_prime_inversion import PRIMES
 def create_prompt(problem: Problem) -> str:
     """Create a prompt for the given problem."""
     if problem.blank == 'x':
-        prompt = f"""Given a prime number p and an integer y, I need to find x such that:
+        prompt = f"""
+        Given a prime number p and an integer y, I need to find x such that:
 
 x * {problem.y} ≡ 1 (mod {problem.prime})
 
-What is the value of x?
+For example, if p = 11 and y = 2, then 6 * 2 ≡ 1 (mod 11), so <answer>6</answer> is the answer.
+For example, if p = 13 and y = 5, then 10 * 5 ≡ 1 (mod 13), so <answer>10</answer> is the answer.
 
-You must provide your answer as a single unformatted number within <answer></answer> tags, e.g. <answer>x</answer>
+Provide your answer as a single unformatted number within <answer></answer> tags, e.g. <answer>x</answer>
 """
     else:  # problem.blank == 'y'
         prompt = f"""Given a prime number p and an integer x, I need to find y such that:
 
 {problem.x} * y ≡ 1 (mod {problem.prime})
 
-What is the value of y?
+For example, if p = 11 and x = 6, then 6 * 2 ≡ 1 (mod 11), so <answer>2</answer> is the answer.
+For example, if p = 13 and x = 10, then 10 * 5 ≡ 1 (mod 13), so <answer>5</answer> is the answer.
 
-You must provide your answer as a single unformatted number within <answer></answer> tags, e.g. <answer>x</answer>.
+Provide your answer as a single unformatted number within <answer></answer> tags, e.g. <answer>x</answer>
 """
     return prompt
 
@@ -211,11 +214,11 @@ def run_baseline_evaluation(model_name: str, problems: list[Problem],
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Evaluate language models on modular inverse problems")
-    parser.add_argument("--model", type=str, default="Qwen/Qwen3-3B", help="HuggingFace model name")
-    parser.add_argument("--num_problems", type=int, default=20, help="Number of problems to generate")z
-    parser.add_argument("--max-new-tokens", type=int, default=500, help="Number of problems to generate")z
+    parser.add_argument("--model", type=str, default="Qwen/Qwen2.5-0.5B", help="HuggingFace model name")
+    parser.add_argument("--num_problems", type=int, default=20, help="Number of problems to generate")
+    parser.add_argument("--max-new-tokens", type=int, default=500, help="Number of problems to generate")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
-    parser.add_argument("--batch_size", type=int, default=8, help="Batch size for inference")
+    parser.add_argument("--batch_size", type=int, default=1, help="Batch size for inference")
 
     args = parser.parse_args()
 
