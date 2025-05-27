@@ -1,7 +1,7 @@
 from typing import Optional
 
 from buffer.base_buff import IOPair
-from types import Reward, Answer
+from custom_types import Reward, Answer
 
 """
 Validates that the provided problem is correct python syntax, and that the input generates a determinstic answer. Outputs a dict containing the score for formatting and the score for correctness.
