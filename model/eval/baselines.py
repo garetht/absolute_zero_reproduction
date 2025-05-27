@@ -94,7 +94,7 @@ def evaluate_model(model_name: str, problems: List[Problem], max_new_tokens: int
             with torch.no_grad():
                 batch_outputs = model.generate(
                     **batch_inputs,
-                    max_new_tokens=500
+                    max_new_tokens=1000
                 )
             end_time = time.time()
             
