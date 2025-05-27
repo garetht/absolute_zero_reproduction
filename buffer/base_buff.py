@@ -1,7 +1,6 @@
 from dataclasses import dataclass
-from typing_extensions import Literal
 
-from jaxtyping import Float, Int
+from jaxtyping import Int
 from torch import Tensor
 import torch
 from transformers import AutoModelForCausalLM
@@ -10,25 +9,10 @@ from buffer.abduction import AbductionBuffer
 from buffer.deduction import DeductionBuffer
 from buffer.induction import InductionBuffer
 from model.args import AZRArgs
-from custom_types import TaskType
+from custom_types import TaskType, Sample
 
 
-@dataclass
-class IOPair:
-    input_str: str
-    output_str: str
 
-
-@dataclass
-class Sample:
-    snippet: str
-    function_io: list[IOPair]
-    input_types: Literal["str", "int", "list", "tuple"]
-    output_types: Literal["str", "int", "list", "tuple"]
-    message: str
-    imports: str  # executable string
-    prompt_tokens: list[str]
-    sample_ids: Int[Tensor, "seq_len"]
 
 
 class BaseBuffer:
