@@ -10,7 +10,7 @@ from buffer.abduction import AbductionBuffer
 from buffer.deduction import DeductionBuffer
 from buffer.induction import InductionBuffer
 from model.args import AZRArgs
-from custom_types import TaskType, BaseSample
+from custom_types import MiniBatch, Role, TaskType, BaseSample
 
 
 
@@ -46,9 +46,24 @@ class MegaBuffer:
     sample_ids: Int[Tensor, "role task batch_size seq_len "]
     # batch_size is the index of the sample in the buffer, same for any role task combo
     buffer: list[BaseSample]
-    def get_minibatch(): 
+
+
+    def get_minibatches(self, args:AZRArgs) -> list[MiniBatch]:
         # looks at the buffer from the current rollout, returns samples indexed using their position in the batch
-        pass
+        out = []
+        for indices in torch.randperm(args.batch_size).reshape(args.n_minibatches, -1):
+            minibatch_samples = [self.buffer[i] for i in indices]
+            minibatch_sample_ids = self.sample_ids[:,:,indices]
+            assert minibatch_sample_ids.shape == (len(Role), len(TaskType), args.minibatch_size, args.max_response_length), "Sample ids should have shape  (len(Role), len(TaskType), args.minibatch_size, args.max_response_length)"
+            minibatch_logprobs = self.logprobs[:,:,indices]
+            assert minibatch_logprobs.shape == (len(Role), len(TaskType), args.minibatch_size, args.max_response_length, args.d_vocab), "Logprobs should have shape  (len(Role), len(TaskType), args.minibatch_size, args.max_response_length, args.vocab_size)"
+            out.append(MiniBatch(
+                samples=minibatch_samples,
+                sample_ids=minibatch_sample_ids,
+                logprobs=minibatch_logprobs
+            ))
+        return out
+
 
     def solver_sample_from_buffer(self, num_to_sample: int) -> list[BaseSample]:
         indices = numpy.random.choice(len(self.seed_buffer), num_to_sample, replace=True)
