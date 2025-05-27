@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from enum import Enum
 from typing import Generic, Literal, Optional, TypeVar
-from jaxtyping import Int
+from jaxtyping import Int, Float
 from torch import Tensor
 
 
@@ -15,12 +15,7 @@ class Answer:
     input: Optional[str]
     program: str
     output: Optional[str]
-
-
-@dataclass
-class Reward:
-    formatting: float
-    correctness: float
+    reward: float
 
 
 class TaskType(Enum):
@@ -40,11 +35,12 @@ class IOPair(Generic[T]):
     input_str: T
     output_str: T
 
+
 @dataclass
 class BaseSample:
     snippet: str
     message: str
-    prompt_tokens: list[str]
+    prompt_tokens: Int[Tensor, "max_prompt_length"]
 
 @dataclass
 class FunctionSample(BaseSample):
@@ -54,7 +50,6 @@ class FunctionSample(BaseSample):
     output_types: Literal["str", "int", "list", "tuple"]
     message: str
     imports: str  # executable string
-    prompt_tokens: list[str]
 
 @dataclass
 class PrimeSample(BaseSample):
@@ -62,3 +57,10 @@ class PrimeSample(BaseSample):
     def prime(self) -> int : 
         return int(self.snippet)
     function_io: list[IOPair[int]]
+
+@dataclass
+class MiniBatch:
+    samples: list[BaseSample]
+    sample_ids: Int[Tensor, "role task minibatch_size seq_len"]
+    logprobs: Float[Tensor, "role task minibatch_size seq_len vocab_size"]
+

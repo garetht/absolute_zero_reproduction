@@ -2,12 +2,12 @@
 from torch import Tensor
 from jaxtyping import Float
 
-from buffer.base_buff import Sample
+from buffer.base_buff import BaseSample
 from custom_types import Answer, Reward, Role
 """
 Computes the correctness of the model's answer baed on value equality in python
 """
-def compute_r_solve(answers: list[Answer], samples: list[Sample]) -> Float[Tensor, "batch_size"]:
+def compute_r_solve(answers: list[Answer], samples: list[BaseSample]) -> Float[Tensor, "batch_size"]:
     pass
 
 """
@@ -19,6 +19,7 @@ def compute_r_propose(r_solve: Float[Tensor, "task batch_size"]) -> Float[Tensor
 """
 Computes the total reward for the model's answer, validating the format and correctness of the answer. answers_and_rewards is a list of answers and solver format rewards for that answer.
 """
-def compute_r_total(answers_and_rewards: list[tuple[Answer, Reward]], role: Role, r_proposer_format: Reward) -> Float[Tensor, "batch_size"]:
+def compute_r_total(samples: list[BaseSample], responses: list[str], role: Role, r_proposer_format: Reward) -> Float[Tensor, "batch_size"]:
     # select the appropriate formatting reward based on the role, if there is no formatting reward, use r_solve or r_propose 
+    # first need to do format reward on the responses
     pass
