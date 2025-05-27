@@ -23,7 +23,7 @@ x * {problem.y} ≡ 1 (mod {problem.prime})
 
 What is the value of x?
 
-Provide your answer within <answer></answer> tags.
+Provide your answer as a single unformatted number within <answer></answer> tags.
 """
     else:  # problem.blank == 'y'
         prompt = f"""I'm working with modular arithmetic. Given a prime number p and an integer x, I need to find y such that:
@@ -32,7 +32,7 @@ Provide your answer within <answer></answer> tags.
 
 What is the value of y?
 
-Provide your answer within <answer></answer> tags.
+Provide your answer as a single unformatted number within <answer></answer> tags.
 """
     return prompt
 
@@ -194,7 +194,7 @@ def run_baseline_evaluation_prime_samples(model_name: str, problems: list[PrimeS
 def run_baseline_evaluation_random_problems(model_name: str, num_problems: int = 100,
                                             max_new_tokens: int = 100, batch_size: int = 1, seed: int = 42):
     return run_baseline_evaluation(
-        model_name, generate_problems(n=num_problems, primes=PRIMES[:10], seed=seed), max_new_tokens,
+        model_name, generate_problems(n=num_problems, primes=PRIMES[7:20], seed=seed), max_new_tokens,
         batch_size
     )
 
