@@ -45,6 +45,18 @@ class Problem:
     # For reproducible display
     desc: str = field(default='')
 
+    def to_prime_sample(self) -> PrimeSample:
+        """Convert this Problem instance to a PrimeSample."""
+        # This is a placeholder implementation as PrimeSample structure is not fully defined
+        # You may need to adjust based on the actual PrimeSample structure
+        return PrimeSample(
+            snippet=str(self.prime),
+            function_io=[{
+                'input_str': self.x if self.x is not None else '',
+                'output_str': self.y if self.y is not None else ''
+            }]
+        )
+
     @staticmethod
     def from_prime_sample(prime_sample: PrimeSample, blank: Literal['x', 'y']) -> 'Problem':
         return Problem(
@@ -61,6 +73,34 @@ def modular_inverse(a: int, p: int) -> int:
 
 
 def generate_problems(n: int, primes: list[int], seed: int = 42) -> list[Problem]:
+    """
+    Generate a list of modular inverse problems for evaluation.
+
+    This function creates n problems where each problem involves finding either x or y
+    in the equation xy ≡ 1 (mod p), where p is a prime number. For each problem,
+    one variable is randomly chosen to be the unknown (blank), and the other is given.
+
+    Args:
+        n (int): The number of problems to generate.
+        primes (list[int]): A list of prime numbers to choose from as moduli.
+        seed (int, optional): Random seed for reproducible problem generation. Defaults to 42.
+
+    Returns:
+        list[Problem]: A list of Problem instances, each containing:
+            - prime: The prime modulus
+            - x: The x value (or None if x is the unknown)
+            - y: The y value (or None if y is the unknown)
+            - blank: Either 'x' or 'y' indicating which variable to solve for
+            - desc: A human-readable description of the problem
+
+    Example:
+        >>> primes = [7, 11, 13]
+        >>> problems = generate_problems(2, primes, seed=123)
+        >>> len(problems)
+        2
+        >>> problems[0].prime in primes
+        True
+    """
     r = random.Random(seed)
     problems = []
     for _ in range(n):

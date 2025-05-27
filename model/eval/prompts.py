@@ -23,7 +23,18 @@ Provide your answer as a single boxed number within e.g. \[
 
 
 def create_prompt(problem: Problem) -> str:
-    """Create a prompt for the given problem."""
+    """
+    Creates a formatted prompt string based on the problem configuration and which variable needs to be solved.
+
+    This function generates an appropriate prompt by selecting between two predefined templates
+    depending on whether the unknown variable is 'x' or 'y'. The prompt is formatted with the
+    known values from the problem instance.
+
+    :param problem: The problem instance containing the variable values and indicating which
+                    variable is unknown
+    :return: A formatted prompt string ready for use
+    :rtype: str
+    """
     if problem.blank == 'x':
         prompt = X_PROMPT.format(y=problem.y, prime=problem.prime)
     else:  # problem.blank == 'y'

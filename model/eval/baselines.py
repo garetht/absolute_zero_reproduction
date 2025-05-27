@@ -1,6 +1,6 @@
 import argparse
 import random
-
+from typing import Any
 
 from custom_types import PrimeSample
 from model.eval.evaluator import evaluate_model_from_name
@@ -8,25 +8,86 @@ from model.eval.prime_inversion import generate_problems, Problem
 from model.eval.test_prime_inversion import PRIMES
 
 
-def run_baseline_evaluation_prime_samples(model_name: str, problems: list[PrimeSample],
-                                          max_new_tokens: int = 100, batch_size: int = 1, seed: int = 42):
+def run_baseline_evaluation_prime_samples(model_name: str,
+                                          prime_samples: list[PrimeSample],
+                                          max_new_tokens: int = 100,
+                                          batch_size: int = 1,
+                                          seed: int = 42) -> dict[str, Any]:
+    """
+    This function takes prime samples, converts each to a Problem instance with a randomly
+     selected variable name, and then performs baseline evaluation using the specified model
+     and parameters. The conversion process involves selecting either 'x' or 'y' as the variable
+     name for each prime sample using the provided random seed for reproducibility.
+
+    :param model_name: Name or identifier of the model to use for evaluation
+    :param prime_samples: Collection of prime samples to be evaluated
+    :param max_new_tokens: Maximum number of new tokens to generate during evaluation
+    :param batch_size: Number of problems to process in each batch
+    :param seed: Random seed for reproducible variable name selection
+    :return: Dictionary containing evaluation results and metrics
+    """
     r = random.Random(seed)
     return run_baseline_evaluation(
-        model_name, [Problem.from_prime_sample(ps, r.choice(['x', 'y'])) for ps in problems], max_new_tokens,
+        model_name, [Problem.from_prime_sample(ps, r.choice(['x', 'y'])) for ps in prime_samples], max_new_tokens,
         batch_size
     )
 
 
-def run_baseline_evaluation_random_problems(model_name: str, num_problems: int = 100,
-                                            max_new_tokens: int = 100, batch_size: int = 1, seed: int = 42):
+def run_baseline_evaluation_random_problems(model_name: str,
+                                            num_problems: int = 100,
+                                            first_prime_index: int = 7,
+                                            last_prime_index: int = 20,
+                                            max_new_tokens: int = 100,
+                                            batch_size: int = 1,
+                                            seed: int = 42) -> dict[str, Any]:
+    """
+    Executes baseline evaluation on a language model using randomly generated
+    mathematical problems within a specified range of prime numbers. This function
+    validates input parameters, generates a set of problems using primes from the
+    specified index range, and runs the baseline evaluation process to assess model
+    performance on mathematical reasoning tasks.
+
+    :param model_name: Name or identifier of the language model to evaluate
+    :param num_problems: Number of mathematical problems to generate for evaluation
+    :param first_prime_index: The Nth prime to start considering from when generating
+    :param last_prime_index: The Nth prime inclusive to stop considering from when generating. The maximum
+    supported is 75
+    :param max_new_tokens: Maximum number of tokens the model should generate per response
+    :param batch_size: Number of problems to process simultaneously in each batch
+    :param seed: Random seed value for reproducible problem generation
+    :return: Dictionary containing evaluation results and performance metrics
+    :raises ValueError: When first_prime_index is negative or exceeds PRIMES list bounds
+    :raises ValueError: When last_prime_index is not greater than first_prime_index or
+                       exceeds PRIMES list length
+    """
+    if first_prime_index < 0 or first_prime_index >= len(PRIMES):
+        raise ValueError(f"first_prime_index must be between 0 and {len(PRIMES) - 1}, got {first_prime_index}")
+
+    if last_prime_index <= first_prime_index or last_prime_index > len(PRIMES):
+        raise ValueError(
+            f"last_prime_index must be between {first_prime_index + 1} and {len(PRIMES)}, got {last_prime_index}")
+
     return run_baseline_evaluation(
-        model_name, generate_problems(n=num_problems, primes=PRIMES[7:20], seed=seed), max_new_tokens,
+        model_name, generate_problems(n=num_problems, primes=PRIMES[first_prime_index:last_prime_index], seed=seed),
+        max_new_tokens,
         batch_size
     )
 
 
 def run_baseline_evaluation(model_name: str, problems: list[Problem],
-                            max_new_tokens: int = 100, batch_size: int = 1):
+                            max_new_tokens: int = 100, batch_size: int = 1) -> dict[str, Any]:
+    """
+    Executes baseline evaluation for a specified model against a collection of problems
+    using default evaluation parameters and returns comprehensive evaluation metrics.
+
+    :param model_name: Name or identifier of the model to be evaluated
+    :param problems: Collection of problem instances to evaluate the model against
+    :param max_new_tokens: Maximum number of new tokens the model can generate during
+        evaluation, defaults to 100
+    :param batch_size: Number of problems to process simultaneously in each batch,
+        defaults to 1
+    :return: Dictionary containing evaluation results and performance metrics
+    """
     return evaluate_model_from_name(
         model_name=model_name,
         problems=problems,

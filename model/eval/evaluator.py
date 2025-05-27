@@ -12,7 +12,7 @@ from model.eval.prompts import create_prompt
 
 
 class Evaluator:
-    """Evaluator class for running model evaluations on mathematical problems."""
+    """Evaluator class for running model evaluations on the prime inversion problem"""
 
     def __init__(self, model_name: str, max_new_tokens: int = 100, batch_size: int = 1):
         """
@@ -117,6 +117,15 @@ class Evaluator:
 
     @staticmethod
     def extract_boxed_number(text: str) -> Optional[int]:
+        """
+        Extract a number from LaTeX \\boxed{} notation in the given text.
+
+        Args:
+            text: The text to search for boxed numbers
+
+        Returns:
+            The integer found within \\boxed{} notation, or None if no match is found
+        """
         # Regex pattern to match \boxed{<number>} and extract the number
         regexp_match = re.search(r"\\boxed\{([+-]?\d+)\}", text)
         if regexp_match:
@@ -197,7 +206,23 @@ class Evaluator:
 
 def evaluate_model_from_name(model_name: str, problems: List[Problem], max_new_tokens: int = 100,
                              batch_size: int = 1) -> Dict[str, Any]:
-    """Evaluate a model on the prime inversion problems."""
+    """
+    Evaluates a language model on a set of programming problems by loading the model
+    from its name.
+
+    :param model_name: The name or path of the pre-trained model to load from Hugging Face
+                      model hub
+    :param problems: List of prime inversion problems to evaluate the model against, each
+                    containing test cases and expected outputs
+    :param max_new_tokens: Maximum number of new tokens the model can generate for each
+                          problem solution
+    :param batch_size: Number of problems to process simultaneously in each evaluation batch
+    :return: Dictionary containing evaluation results including accuracy
+             metrics, timing information, and detailed per-problem analysis
+    :raises ValueError: When model_name is empty or invalid
+    :raises RuntimeError: When model loading fails
+    :raises ConnectionError: When unable to download model from Hugging Face hub
+    """
     eval_start_time = time.time()
 
     print(f"🔄 Loading model: {model_name}")
