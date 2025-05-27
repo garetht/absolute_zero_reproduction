@@ -98,12 +98,13 @@ class Evaluator:
                              overall_correct: int, total_processed: int):
         """Print summary for the current batch."""
         batch_accuracy = batch_correct / batch_size
-        batch_responded_accuracy = batch_correct / (batch_size - no_responses)
         print(
-            f"📈 Batch {batch_idx + 1} results: {batch_correct}/{batch_size} correct ({batch_accuracy:.1%}) ({batch_responded_accuracy:.1%} of responded)")
+            f"📈 Batch {batch_idx + 1} results: {batch_correct}/{batch_size} correct ({batch_accuracy:.1%}) ")
 
         current_overall_accuracy = overall_correct / total_processed
-        print(f"📊 Overall progress: {overall_correct}/{total_processed} correct ({current_overall_accuracy:.1%})")
+        current_responded_accuracy = overall_correct / (total_processed - no_responses)
+
+        print(f"📊 Overall progress: {overall_correct}/{total_processed} correct ({current_overall_accuracy:.1%}) ({current_responded_accuracy:.1%} of responded)")
 
     def _print_final_results(self, results: Dict[str, Any], total_eval_time: float, num_problems: int):
         """Print final evaluation results."""
