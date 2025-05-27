@@ -52,3 +52,6 @@ class AZRArgs:
     rollout_top_p: float = 1.0
     k_references: int = 6
     n_samples_to_estimate_task_accuracy: int = 8
+    n_minibatches: int = 16
+    minibatch_size: int = 8
+    batch_size = minibatch_size*n_minibatches
