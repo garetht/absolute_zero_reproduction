@@ -1,11 +1,11 @@
 import argparse
 import random
-from typing import Any
+
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from custom_types import PrimeSample, Problem, EvaluationResults
 from model.eval.evaluator import evaluate_model_from_name, evaluate_model
 from model.eval.prime_inversion import generate_problems, PRIMES
-from transformers import AutoModelForCausalLM, AutoTokenizer
 
 
 def run_baseline_evaluation_prime_samples(model: AutoModelForCausalLM,
