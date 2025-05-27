@@ -14,32 +14,21 @@ from model.eval.prompts import create_prompt
 class Evaluator:
     """Evaluator class for running model evaluations on the prime inversion problem"""
 
-    def __init__(self, model_name: str, max_new_tokens: int = 100, batch_size: int = 1):
+    def __init__(self, model: AutoModelForCausalLM, tokenizer: AutoTokenizer, max_new_tokens: int = 100,
+                 batch_size: int = 1):
         """
         Initialize the evaluator with model configuration.
 
         Args:
-            model_name: Name/path of the model to evaluate
+            model: The AutoModelForCausalLM under evaluation
+            tokenizer: The AutoTokenizer for the model
             max_new_tokens: Maximum number of new tokens to generate
             batch_size: Number of problems to process in each batch
         """
-        self.model_name = model_name
         self.max_new_tokens = max_new_tokens
         self.batch_size = batch_size
-        self.model = None
-        self.tokenizer = None
-
-    def load_model(self):
-        """Load the model and tokenizer."""
-        print(f"📥 Loading model: {self.model_name}")
-        self.model = AutoModelForCausalLM.from_pretrained(
-            self.model_name, torch_dtype=torch.float16, device_map="auto"
-        )
-        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-
-        # Set pad token if not present
-        if self.tokenizer.pad_token is None:
-            self.tokenizer.pad_token = self.tokenizer.eos_token
+        self.model = model
+        self.tokenizer = tokenizer
 
     def _process_batch(self, batch_problems: List[Problem], batch_idx: int, total_batches: int) -> tuple:
         """Process a single batch of problems."""
@@ -140,9 +129,6 @@ class Evaluator:
         if eval_start_time is None:
             eval_start_time = time.time()
 
-        if self.model is None or self.tokenizer is None:
-            self.load_model()
-
         results = {
             "model": self.model_name,
             "correct": 0,
@@ -225,16 +211,39 @@ def evaluate_model_from_name(model_name: str, problems: List[Problem], max_new_t
     :raises RuntimeError: When model loading fails
     :raises ConnectionError: When unable to download model from Hugging Face hub
     """
-    eval_start_time = time.time()
 
     print(f"🔄 Loading model: {model_name}")
     print(f"📊 Evaluation setup: {len(problems)} problems, batch_size={batch_size}, max_new_tokens={max_new_tokens}")
 
-    tokenizer: AutoTokenizer = AutoTokenizer.from_pretrained(model_name)
     model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch.float16, device_map="auto")
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
 
     print(f"✅ Model loaded successfully on device: {model.device}")
     print(f"🚀 Starting evaluation...")
 
-    evaluator = Evaluator(model_name, max_new_tokens=max_new_tokens, batch_size=batch_size)
+    return evaluate_model(model, tokenizer, problems, max_new_tokens, batch_size)
+
+
+def evaluate_model(model: AutoModelForCausalLM, tokenizer: AutoTokenizer, problems: List[Problem],
+                   max_new_tokens: int = 100,
+                   batch_size: int = 1) -> Dict[str, Any]:
+    """
+    Evaluates a language model on a set of programming problems using an actual model and tokenizer
+
+    :param model: The model under evaluation
+    :param tokenizer: The tokenizer for the model under evaluation
+    :param problems: List of prime inversion problems to evaluate the model against, each
+                    containing test cases and expected outputs
+    :param max_new_tokens: Maximum number of new tokens the model can generate for each
+                          problem solution
+    :param batch_size: Number of problems to process simultaneously in each evaluation batch
+    :return: Dictionary containing evaluation results including accuracy
+             metrics, timing information, and detailed per-problem analysis
+    :raises ValueError: When model_name is empty or invalid
+    :raises RuntimeError: When model loading fails
+    :raises ConnectionError: When unable to download model from Hugging Face hub
+    """
+    eval_start_time = time.time()
+
+    evaluator = Evaluator(model, tokenizer, max_new_tokens=max_new_tokens, batch_size=batch_size)
     return evaluator.evaluate(problems, eval_start_time)

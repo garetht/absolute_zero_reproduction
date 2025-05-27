@@ -3,12 +3,14 @@ import random
 from typing import Any
 
 from custom_types import PrimeSample
-from model.eval.evaluator import evaluate_model_from_name
+from model.eval.evaluator import evaluate_model_from_name, evaluate_model
 from model.eval.prime_inversion import generate_problems, PRIMES
 from model.eval.problem import Problem
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 
-def run_baseline_evaluation_prime_samples(model_name: str,
+def run_baseline_evaluation_prime_samples(model: AutoModelForCausalLM,
+                                          tokenizer: AutoTokenizer,
                                           prime_samples: list[PrimeSample],
                                           max_new_tokens: int = 100,
                                           batch_size: int = 1,
@@ -18,7 +20,8 @@ def run_baseline_evaluation_prime_samples(model_name: str,
      and parameters. The conversion process involves selecting either 'x' or 'y' as the variable
      name for each prime sample using the provided random seed for reproducibility.
 
-    :param model_name: Name or identifier of the model to use for evaluation
+    :param model: Model being evaluated
+    :param tokenizer: Tokenizer for the model being evaluated
     :param prime_samples: Collection of prime samples to be evaluated
     :param max_new_tokens: Maximum number of new tokens to generate during evaluation
     :param batch_size: Number of problems to process in each batch
@@ -26,8 +29,8 @@ def run_baseline_evaluation_prime_samples(model_name: str,
     :return: Dictionary containing evaluation results and metrics
     """
     r = random.Random(seed)
-    return run_baseline_evaluation(
-        model_name, [Problem.from_prime_sample(ps, r.choice(['x', 'y'])) for ps in prime_samples], max_new_tokens,
+    return evaluate_model(
+        model, tokenizer, [Problem.from_prime_sample(ps, r.choice(['x', 'y'])) for ps in prime_samples], max_new_tokens,
         batch_size
     )
 
@@ -66,32 +69,10 @@ def run_baseline_evaluation_random_problems(model_name: str,
         raise ValueError(
             f"last_prime_index must be between {first_prime_index + 1} and {len(PRIMES)}, got {last_prime_index}")
 
-    return run_baseline_evaluation(
+    return evaluate_model_from_name(
         model_name, generate_problems(n=num_problems, primes=PRIMES[first_prime_index:last_prime_index], seed=seed),
         max_new_tokens,
         batch_size
-    )
-
-
-def run_baseline_evaluation(model_name: str, problems: list[Problem],
-                            max_new_tokens: int = 100, batch_size: int = 1) -> dict[str, Any]:
-    """
-    Executes baseline evaluation for a specified model against a collection of problems
-    using default evaluation parameters and returns comprehensive evaluation metrics.
-
-    :param model_name: Name or identifier of the model to be evaluated
-    :param problems: Collection of problem instances to evaluate the model against
-    :param max_new_tokens: Maximum number of new tokens the model can generate during
-        evaluation, defaults to 100
-    :param batch_size: Number of problems to process simultaneously in each batch,
-        defaults to 1
-    :return: Dictionary containing evaluation results and performance metrics
-    """
-    return evaluate_model_from_name(
-        model_name=model_name,
-        problems=problems,
-        max_new_tokens=max_new_tokens,
-        batch_size=batch_size,
     )
 
 
