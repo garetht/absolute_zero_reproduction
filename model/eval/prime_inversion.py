@@ -53,7 +53,7 @@ class Problem:
             y=prime_sample.function_io[0].output_str,
             blank=blank
         )
-    
+
 
 def modular_inverse(a: int, p: int) -> int:
     # Using Fermat's little theorem to compute modular inverse: a^(p-2) mod p
@@ -61,13 +61,13 @@ def modular_inverse(a: int, p: int) -> int:
 
 
 def generate_problems(n: int, primes: list[int], seed: int = 42) -> list[Problem]:
-    random.seed(seed)
+    r = random.Random(seed)
     problems = []
     for _ in range(n):
-        p = random.choice(primes)
-        x = random.randint(1, p - 1)
+        p = r.choice(primes)
+        x = r.randint(1, p - 1)
         y = modular_inverse(x, p)
-        blank = random.choice(['x', 'y'])
+        blank = r.choice(['x', 'y'])
         if blank == 'x':
             prob = Problem(prime=p, x=x, y=y, blank='x', desc=f"Find x given y={y}, p={p}")
         else:

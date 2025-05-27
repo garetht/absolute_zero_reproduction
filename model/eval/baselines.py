@@ -1,4 +1,5 @@
 import argparse
+import random
 import re
 import time
 from datetime import datetime
@@ -7,6 +8,7 @@ import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from typing import List, Dict, Any, Optional
 
+from custom_types import PrimeSample
 from model.eval.prime_inversion import generate_problems, Problem, solve_modular_inverse
 
 
@@ -141,10 +143,22 @@ def evaluate_model(model_name: str, problems: List[Problem], max_new_tokens: int
     return results
 
 
-def run_baseline_evaluation(model_name: str, num_problems: int = 20, seed: int = 42,
-                            primes: List[int] = None, output_dir: str = "results",
-                            max_new_tokens: int = 100, batch_size: int = 1,
-                            save_responses: bool = True) -> Dict[str, Any]:
+def run_baseline_evaluation_prime_samples(model_name: str, problems: list[PrimeSample],
+                                          max_new_tokens: int = 100, batch_size: int = 1, seed: int = 42):
+    r = random.Random(seed)
+    return run_baseline_evaluation_problems(
+        model_name, [Problem.from_prime_sample(ps, r.choice(['x', 'y'])) for ps in problems], max_new_tokens,
+        batch_size
+    )
+
+
+def run_baseline_evaluation_problems(model_name: str, problems: list[Problem],
+                                     max_new_tokens: int = 100, batch_size: int = 1):
+    pass
+
+
+def run_baseline_evaluation(model_name: str, problems: list[Problem],
+                            max_new_tokens: int = 100, batch_size: int = 1) -> Dict[str, Any]:
     """Run the baseline evaluation for a specified model."""
     if primes is None:
         primes = [3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53]
@@ -158,7 +172,6 @@ def run_baseline_evaluation(model_name: str, num_problems: int = 20, seed: int =
         problems=problems,
         max_new_tokens=max_new_tokens,
         batch_size=batch_size,
-        save_responses=save_responses
     )
 
 
