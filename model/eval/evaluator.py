@@ -29,6 +29,7 @@ class Evaluator:
         self.batch_size = batch_size
         self.model = model
         self.tokenizer = tokenizer
+        self.model_name = model.config.name_or_path
 
     def _process_batch(self, batch_problems: List[Problem], batch_idx: int, total_batches: int) -> tuple:
         """Process a single batch of problems."""
@@ -99,7 +100,7 @@ class Evaluator:
         """Print final evaluation results."""
         print(f"\n🎯 Evaluation completed!")
         print(f"📊 Final Results:")
-        print(f"   • Model: {self.model_name}")
+        print(f"   • Model: {self.model.cfg.name}")
         print(f"   • Total problems: {results['total']}")
         print(f"   • Correct answers: {results['correct']}")
         print(f"   • Overall accuracy: {results['accuracy']:.2%}")
