@@ -1,6 +1,6 @@
 import random
 
-from custom_types import Problem
+from custom_types import Problem, TaskType
 
 
 def solve_modular_inverse(p: int, x=None, y=None, verbose: bool = False):
@@ -72,8 +72,8 @@ def generate_problems(n: int, primes: list[int], seed: int = 42) -> list[Problem
         p = r.choice(primes)
         x = r.randint(1, p - 1)
         y = modular_inverse(x, p)
-        blank = r.choice(['x', 'y', 'p'])
-        prob = Problem(prime=p, x=x, y=y, blank=blank)
+        task_type = r.choice(list(TaskType))
+        prob = Problem(prime=p, x=x, y=y, task_type=task_type)
         problems.append(prob)
     return problems
 

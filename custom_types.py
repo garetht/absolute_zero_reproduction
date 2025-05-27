@@ -6,7 +6,6 @@ from typing import Generic, Literal, Optional, TypeVar
 from jaxtyping import Int
 from torch import Tensor
 
-
 """
 Task type to list of tuples where tuple[0] is the model answer and tuple[1] is the ground truth answer
 """
@@ -35,18 +34,22 @@ class Role(Enum):
     SOLVER = "SOLVER"
     PROPOSER = "PROPOSER"
 
+
 T = TypeVar("T")
+
 
 @dataclass
 class IOPair(Generic[T]):
     input_str: T
     output_str: T
 
+
 @dataclass
 class BaseSample:
     snippet: str
     message: str
     prompt_tokens: list[str]
+
 
 @dataclass
 class FunctionSample(BaseSample):
@@ -58,11 +61,13 @@ class FunctionSample(BaseSample):
     imports: str  # executable string
     prompt_tokens: list[str]
 
+
 @dataclass
 class PrimeSample(BaseSample):
     @property
-    def prime(self) -> int : 
+    def prime(self) -> int:
         return int(self.snippet)
+
     function_io: list[IOPair[int]]
 
 
@@ -77,12 +82,23 @@ class ProblemResult(TypedDict):
 @dataclass
 class Problem:
     prime: int
-    x: Optional[int]
-    y: Optional[int]
-    blank: Literal['x', 'y', 'p']
+    x: int
+    y: int
     task_type: TaskType
     # For reproducible display
     desc: str = field(default='')
+
+    @property
+    def blank(self) -> Literal['x', 'y', 'p']:
+        match self.task_type:
+            case TaskType.ABDUCTION:
+                blank = 'x'
+            case TaskType.DEDUCTION:
+                blank = 'y'
+            case TaskType.INDUCTION:
+                blank = 'p'
+
+        return blank
 
     def __repr__(self) -> str:
         """Return a nicely formatted string representation of the problem."""
@@ -93,22 +109,12 @@ class Problem:
         else:
             return f"Find a p such that {self.x} * {self.y} ≡ 1 (mod p) [p = {self.prime}]"
 
-
     @staticmethod
     def from_prime_sample(prime_sample: PrimeSample, task_type: TaskType) -> 'Problem':
-        match task_type:
-            case TaskType.ABDUCTION:
-                blank = 'x'
-            case TaskType.DEDUCTION:
-                blank = 'y'
-            case TaskType.INDUCTION:
-                blank = 'p'
-
         return Problem(
             prime=prime_sample.prime,
             x=prime_sample.function_io[0].input_str,
             y=prime_sample.function_io[0].output_str,
-            blank=blank,
             task_type=task_type
         )
 
