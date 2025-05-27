@@ -10,88 +10,40 @@ from typing import List, Dict, Any, Optional
 from tqdm import tqdm
 
 from custom_types import PrimeSample
-from model.eval.prime_inversion import generate_problems, Problem, solve_modular_inverse
+from model.eval.prime_inversion import generate_problems, Problem
 from model.eval.test_prime_inversion import PRIMES
 
 
-# X_PROMPT = """
-# Given a prime number p and an integer y, find x such that:
-#
-# x * {y} ≡ 1 (mod {p})
-# """
-#
-# Y_PROMPT = """
-# Given a prime number p and an integer x, find y such that:
-#
-# {x} * y ≡ 1 (mod {p})
-# """
-#
-# def create_random_problems_dataset(num_problems: int = 100,
-#                                    seed: int = 42):
-#
-#     problems = generate_problems(n=num_problems, primes=PRIMES[7:20], seed=seed)
-#     dataset = MemoryDataset([
-#         Sample(
-#             input=X_PROMPT.format(x=problem.y, p=problem.prime) if problem.blank == 'x' else Y_PROMPT.format(y=problem.y, p=problem.prime),
-#             target=f"{problem.x}" if problem.blank == 'x' else f"{problem.y}",
-#         )
-#         for problem in problems
-#     ])
-#
-#     return dataset
-#
-#
-# @task
-# def run_evaluation():
-#     return Task(
-#         dataset=create_random_problems_dataset(num_problems=100, seed=42),
-#         solver=[system_message("")]
-#     )
-#
-#
-# @task
-# def security_guide():
-#     return Task(
-#         dataset=dataset,
-#         solver=[system_message(SYSTEM_MESSAGE), generate()],
-#         scorer=model_graded_fact(),
-#     )
-
-
-def create_prompt(problem: Problem) -> str:
-    """Create a prompt for the given problem."""
-    if problem.blank == 'x':
-        prompt = f"""<|im_start|>user
+X_PROMPT = """<|im_start|>user
 Given a prime number p and an integer y, find x such that:
 
-x * {problem.y} ≡ 1 (mod {problem.prime})
+x * {y} ≡ 1 (mod {prime})
 
 Provide your answer as a single boxed number e.g. \[
 \\boxed{{x}}
 \]<|im_end|>
 <|im_start|>assistant
 """
-    else:  # problem.blank == 'y'
-        prompt = f"""<|im_start|>user
+
+Y_PROMPT = """<|im_start|>user
 Given a prime number p and an integer x, find y such that:
 
-{problem.x} * y ≡ 1 (mod {problem.prime})
+{x} * y ≡ 1 (mod {prime})
 
 Provide your answer as a single boxed number within e.g. \[
 \\boxed{{x}}
 \]<|im_end|>
 <|im_start|>assistant
 """
+
+
+def create_prompt(problem: Problem) -> str:
+    """Create a prompt for the given problem."""
+    if problem.blank == 'x':
+        prompt = X_PROMPT.format(y=problem.y, prime=problem.prime)
+    else:  # problem.blank == 'y'
+        prompt = Y_PROMPT.format(x=problem.x, prime=problem.prime)
     return prompt
-
-
-def create_extractor_prompt() -> str:
-    """Create a prompt for extracting the answer from the model's response."""
-    return f"""
-Given the following model's response, extract the answer as a single number surrounded by <answer></answer> tags.
-
-e.g. <answer>x</answer>
-    """
 
 
 def extract_boxed_number(text) -> Optional[int]:
