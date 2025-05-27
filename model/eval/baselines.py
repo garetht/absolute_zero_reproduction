@@ -14,8 +14,7 @@ def run_baseline_evaluation_prime_samples(model_name: str,
                                           batch_size: int = 1,
                                           seed: int = 42) -> dict[str, Any]:
     """
-    This function takes prime samples, converts each to a Problem instance with a randomly
-     selected variable name, and then performs baseline evaluation using the specified model
+    This function takes prime samples and then performs baseline evaluation using the specified model
      and parameters. The conversion process involves selecting either 'x' or 'y' as the variable
      name for each prime sample using the provided random seed for reproducibility.
 
