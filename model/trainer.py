@@ -16,7 +16,7 @@ from model.compute.reward import compute_r_total
 from model.inference import generate_response, generate_response_bulk
 from custom_types import Answer, TaskType, Reward
 from utils.validate_by_executing import validate_by_executing_induction, validate_by_executing_deduction_abduction
-from utils.string_formatting import format_task_prompts
+from utils.string_formatting import format_task_prompts, format_for_abduction, format_for_induction
 
 
 def create_optimizer_and_scheduler() -> torch.optim.Optimizer:
@@ -115,11 +115,11 @@ class AZRTrainer:
             deduction_reward, deduction_answer = self.propose_task(TaskType.DEDUCTION)
 
             if abduction_answer is not None:
-                sample = create_sample_from_answer(abduction_answer)
+                sample = create_sample_from_answer(abduction_answer, TaskType.ABDUCTION)
                 self.mega_buffer.abduction_buffer.extend(sample)
 
             if deduction_answer is not None:
-                sample = create_sample_from_answer(deduction_answer)
+                sample = create_sample_from_answer(deduction_answer, TaskType.DEDUCTION)
                 self.mega_buffer.deduction_buffer.extend(sample)
 
         all_rewards = torch.tensor((len(TaskType),))
@@ -137,7 +137,7 @@ class AZRTrainer:
 
     def propose_task(self, task_type: TaskType) -> tuple[Reward, Answer | None]:
         sample = self.mega_buffer.sample_abduction_deduction()
-        prompt = self._format_for_abduction(sample)
+        prompt = format_for_abduction(sample)
         response = generate_response(self.args, self.training_model, self.tokenizer, prompt)
 
         answer = extract_program_input_output(response, task_type)
@@ -148,7 +148,7 @@ class AZRTrainer:
         return reward, answer if is_valid else None
 
     def generate_io_pairs(self, program: Sample, num_io_pairs: int) -> list[IOPair]:
-        induction_prompt = self._format_for_induction(program)
+        induction_prompt = format_for_induction(program)
 
         responses = []
         for i in range(num_io_pairs):

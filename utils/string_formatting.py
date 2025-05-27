@@ -1,10 +1,11 @@
-def format_for_induction(self, program: Sample) -> str:
+from custom_types import Sample
+def format_for_induction(program: Sample) -> str:
     pass
 
-def format_for_abduction(self, program: Sample) -> str:
+def format_for_abduction(program: Sample) -> str:
     pass
 
-def format_for_deduction(self, program: Sample) -> str:
+def format_for_deduction(program: Sample) -> str:
     pass
 
 def format_task_prompts(sample: list[Sample]) -> list[str]:
