@@ -148,7 +148,7 @@ def evaluate_model(model_name: str, problems: List[Problem], max_new_tokens: int
                 f"\n📦 Processing batch {batch_idx + 1}/{total_batches} (problems {i + 1}-{min(i + batch_size, len(problems))})")
 
             # Tokenize all prompts in the batch
-            batch_inputs = tokenizer(batch_prompts, return_tensors="pt", padding=True).to(model.device)
+            batch_inputs = tokenizer(batch_prompts, return_tensors="pt", padding=True, padding_side="left").to(model.device)
 
             print(batch_inputs)
 
