@@ -3,7 +3,7 @@ import random
 
 
 from custom_types import PrimeSample
-from model.eval.evaluator import Evaluator, evaluate_model_from_name
+from model.eval.evaluator import evaluate_model_from_name
 from model.eval.prime_inversion import generate_problems, Problem
 from model.eval.test_prime_inversion import PRIMES
 
