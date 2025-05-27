@@ -100,7 +100,7 @@ class Evaluator:
         """Print final evaluation results."""
         print(f"\n🎯 Evaluation completed!")
         print(f"📊 Final Results:")
-        print(f"   • Model: {self.model.cfg.name}")
+        print(f"   • Model: {self.model_name}")
         print(f"   • Total problems: {results['total']}")
         print(f"   • Correct answers: {results['correct']}")
         print(f"   • Overall accuracy: {results['accuracy']:.2%}")
