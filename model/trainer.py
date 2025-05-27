@@ -14,7 +14,7 @@ from buffer.base_buff import BaseBuffer, MegaBuffer, Sample, IOPair
 from model.args import AZRArgs
 from model.compute.reward import compute_r_total
 from model.inference import generate_response, generate_response_bulk
-from types import Answer, TaskType, Reward
+from custom_types import Answer, TaskType, Reward
 from utils.validate_by_executing import validate_by_executing_induction, validate_by_executing_deduction_abduction
 
 

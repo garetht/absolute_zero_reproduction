@@ -10,7 +10,7 @@ from buffer.abduction import AbductionBuffer
 from buffer.deduction import DeductionBuffer
 from buffer.induction import InductionBuffer
 from model.args import AZRArgs
-from types import TaskType
+from custom_types import TaskType
 
 
 @dataclass

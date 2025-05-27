@@ -3,7 +3,7 @@ from torch import Tensor
 from jaxtyping import Float
 
 from buffer.base_buff import Sample
-from types import Answer
+from custom_types import Answer
 """
 Computes the correctness of the model's answer baed on value equality in python
 """
