@@ -140,8 +140,6 @@ def evaluate_model(model_name: str, problems: List[Problem], max_new_tokens: int
             # Tokenize all prompts in the batch
             batch_inputs = tokenizer(batch_prompts, return_tensors="pt", padding=True, padding_side="left").to(model.device)
 
-            print(batch_inputs)
-
             start_time = time.time()
             with torch.no_grad():
                 batch_outputs = model.generate(
@@ -152,24 +150,6 @@ def evaluate_model(model_name: str, problems: List[Problem], max_new_tokens: int
 
             batch_time = end_time - start_time
             print(f"⏱️  Batch generation time: {batch_time:.2f}s ({batch_time / len(batch_problems):.2f}s per problem)")
-
-            # string_batch_outputs = tokenizer.batch_decode(batch_outputs, skip_special_tokens=True)
-            # extractor_prompt = create_extractor_prompt()
-            #
-            # extractor_prompts = [extractor_prompt + string_batch_output for string_batch_output in string_batch_outputs]
-            # tokenized_extractor_prompts = tokenizer(
-            #     extractor_prompts,
-            #     return_tensors="pt"
-            # ).to(model.device)
-            #
-            # # decodeds = tokenizer.batch_decode(extractor_prompts, skip_special_tokens=True)
-            # with torch.no_grad():
-            #     answer_extraction_outputs = model.generate(
-            #         **tokenized_extractor_prompts,
-            #         max_new_tokens=max_new_tokens
-            #     )
-            # print(
-            #     f"⏱️  Answer extraction time: {batch_time:.2f}s ({batch_time / len(batch_problems):.2f}s per problem)")
 
             # Process each result in the batch
             batch_correct = 0
