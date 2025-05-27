@@ -1,5 +1,5 @@
 from custom_types import BaseSample, TaskType
-def format_for_induction(program: BaseSample) -> str:
+def format_for_induction(program: BaseSample, num_io_pairs: int) -> str:
     pass
 
 def format_for_abduction(program: BaseSample) -> str:
