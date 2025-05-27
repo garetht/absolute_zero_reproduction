@@ -7,9 +7,11 @@ from datetime import datetime
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from typing import List, Dict, Any, Optional
+from tqdm import tqdm
 
 from custom_types import PrimeSample
 from model.eval.prime_inversion import generate_problems, Problem, solve_modular_inverse
+from model.eval.test_prime_inversion import PRIMES
 
 
 def create_prompt(problem: Problem) -> str:
@@ -19,20 +21,18 @@ def create_prompt(problem: Problem) -> str:
 
 x * {problem.y} ≡ 1 (mod {problem.prime})
 
-In other words, x is the modular inverse of {problem.y} modulo {problem.prime}.
 What is the value of x?
 
-Please provide your answer within <answer></answer> tags.
+Provide your answer within <answer></answer> tags.
 """
     else:  # problem.blank == 'y'
         prompt = f"""I'm working with modular arithmetic. Given a prime number p and an integer x, I need to find y such that:
 
 {problem.x} * y ≡ 1 (mod {problem.prime})
 
-In other words, y is the modular inverse of {problem.x} modulo {problem.prime}.
 What is the value of y?
 
-Please provide your answer within <answer></answer> tags.
+Provide your answer within <answer></answer> tags.
 """
     return prompt
 
@@ -57,9 +57,16 @@ def extract_answer(response: str) -> Optional[int]:
 def evaluate_model(model_name: str, problems: List[Problem], max_new_tokens: int = 100,
                    batch_size: int = 1, save_responses: bool = True) -> Dict[str, Any]:
     """Evaluate a model on the prime inversion problems."""
-    print(f"Loading model: {model_name}")
+    eval_start_time = time.time()
+    
+    print(f"🔄 Loading model: {model_name}")
+    print(f"📊 Evaluation setup: {len(problems)} problems, batch_size={batch_size}, max_new_tokens={max_new_tokens}")
+    
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch.float16, device_map="auto")
+    
+    print(f"✅ Model loaded successfully on device: {model.device}")
+    print(f"🚀 Starting evaluation...")
 
     results = {
         "model": model_name,
@@ -69,104 +76,131 @@ def evaluate_model(model_name: str, problems: List[Problem], max_new_tokens: int
         "problems": []
     }
 
-    # Process problems in batches
-    for i in range(0, len(problems), batch_size):
-        batch_problems = problems[i:i + batch_size]
-        batch_prompts = [create_prompt(prob) for prob in batch_problems]
+    # Calculate total number of batches for progress tracking
+    total_batches = (len(problems) + batch_size - 1) // batch_size
+    
+    # Process problems in batches with progress bar
+    with tqdm(total=len(problems), desc="Evaluating problems", unit="problem") as pbar:
+        for batch_idx, i in enumerate(range(0, len(problems), batch_size)):
+            batch_problems = problems[i:i + batch_size]
+            batch_prompts = [create_prompt(prob) for prob in batch_problems]
+            
+            print(f"\n📦 Processing batch {batch_idx + 1}/{total_batches} (problems {i + 1}-{min(i + batch_size, len(problems))})")
 
-        # Tokenize all prompts in the batch
-        batch_inputs = tokenizer(batch_prompts, return_tensors="pt", padding=True).to(model.device)
+            # Tokenize all prompts in the batch
+            batch_inputs = tokenizer(batch_prompts, return_tensors="pt", padding=True).to(model.device)
 
-        start_time = time.time()
-        with torch.no_grad():
-            batch_outputs = model.generate(
-                **batch_inputs,
-                max_new_tokens=max_new_tokens,
-                do_sample=False
-            )
-        end_time = time.time()
+            start_time = time.time()
+            with torch.no_grad():
+                batch_outputs = model.generate(
+                    **batch_inputs,
+                    max_new_tokens=500
+                )
+            end_time = time.time()
+            
+            batch_time = end_time - start_time
+            print(f"⏱️  Batch generation time: {batch_time:.2f}s ({batch_time/len(batch_problems):.2f}s per problem)")
 
-        # Process each result in the batch
-        for j, (problem, outputs) in enumerate(zip(batch_problems, batch_outputs)):
-            response = tokenizer.decode(outputs, skip_special_tokens=True)
+            # Process each result in the batch
+            batch_correct = 0
+            for j, (problem, outputs) in enumerate(zip(batch_problems, batch_outputs)):
+                response = tokenizer.decode(outputs, skip_special_tokens=True)
+                print("the model's response is: ", response)
 
-            # Get the part of the response that comes after the prompt
-            model_response = response[len(batch_prompts[j]):]
+                # Get the part of the response that comes after the prompt
+                model_response = response[len(batch_prompts[j]):]
 
-            # Extract answer
-            extracted_answer = extract_answer(model_response)
+                # Extract answer
+                extracted_answer = extract_answer(model_response)
 
-            # Calculate correct answer
-            if problem.blank == 'x':
-                correct_answer = solve_modular_inverse(p=problem.prime, x=None, y=problem.y, verbose=False)
-            else:  # problem.blank == 'y'
-                correct_answer = solve_modular_inverse(p=problem.prime, x=problem.x, y=None, verbose=False)
+                # Calculate correct answer
+                if problem.blank == 'x':
+                    correct_answer = solve_modular_inverse(p=problem.prime, x=None, y=problem.y, verbose=False)
+                else:  # problem.blank == 'y'
+                    correct_answer = solve_modular_inverse(p=problem.prime, x=problem.x, y=None, verbose=False)
 
-            # Compare answers (considering modulo)
-            is_correct = False
-            if extracted_answer is not None:
-                # Check if answers are equivalent modulo prime
-                is_correct = (extracted_answer % problem.prime) == (correct_answer % problem.prime)
+                # Compare answers (considering modulo)
+                is_correct = False
+                if extracted_answer is not None:
+                    # Check if answers are equivalent modulo prime
+                    is_correct = (extracted_answer % problem.prime) == (correct_answer % problem.prime)
 
-            if is_correct:
-                results["correct"] += 1
+                if is_correct:
+                    results["correct"] += 1
+                    batch_correct += 1
 
-            # Save problem results
-            problem_result = {
-                "problem": problem.desc,
-                "extracted_answer": extracted_answer,
-                "correct_answer": correct_answer,
-                "is_correct": is_correct,
-                "time_seconds": (end_time - start_time) / batch_size  # Approximate per-problem time
-            }
+                # Save problem results
+                problem_result = {
+                    "problem": problem.desc,
+                    "extracted_answer": extracted_answer,
+                    "correct_answer": correct_answer,
+                    "is_correct": is_correct,
+                    "time_seconds": batch_time / len(batch_problems)  # Approximate per-problem time
+                }
 
-            if save_responses:
-                problem_result["prompt"] = batch_prompts[j]
-                problem_result["response"] = model_response
+                if save_responses:
+                    problem_result["prompt"] = batch_prompts[j]
+                    problem_result["response"] = model_response
 
-            results["problems"].append(problem_result)
+                results["problems"].append(problem_result)
 
-            # Print result
-            prob_idx = i + j
-            print(f"Problem {prob_idx + 1}/{len(problems)}: {problem.desc}")
-            print(f"  Extracted: {extracted_answer}")
-            print(f"  Correct: {correct_answer}")
-            print(f"  Result: {'✓' if is_correct else '✗'}")
-            print(f"  Time: {(end_time - start_time) / batch_size:.2f}s per problem")
-            print()
+                # Update progress bar
+                pbar.update(1)
+                
+                # Update progress bar description with current accuracy
+                current_accuracy = results["correct"] / len(results["problems"])
+                pbar.set_postfix({
+                    'accuracy': f'{current_accuracy:.1%}',
+                    'correct': f'{results["correct"]}/{len(results["problems"])}'
+                })
+
+            # Print batch summary
+            batch_accuracy = batch_correct / len(batch_problems)
+            print(f"📈 Batch {batch_idx + 1} results: {batch_correct}/{len(batch_problems)} correct ({batch_accuracy:.1%})")
+            
+            # Print current overall accuracy
+            current_overall_accuracy = results["correct"] / len(results["problems"])
+            print(f"📊 Overall progress: {results['correct']}/{len(results['problems'])} correct ({current_overall_accuracy:.1%})")
+
+    eval_end_time = time.time()
+    total_eval_time = eval_end_time - eval_start_time
 
     # Calculate accuracy
     accuracy = results["correct"] / results["total"] if results["total"] > 0 else 0
     results["accuracy"] = accuracy
+    results["total_eval_time_seconds"] = total_eval_time
 
-    print(f"Overall accuracy: {accuracy:.2%}")
+    print(f"\n🎯 Evaluation completed!")
+    print(f"📊 Final Results:")
+    print(f"   • Model: {model_name}")
+    print(f"   • Total problems: {results['total']}")
+    print(f"   • Correct answers: {results['correct']}")
+    print(f"   • Overall accuracy: {accuracy:.2%}")
+    print(f"   • Total evaluation time: {total_eval_time:.1f}s")
+    print(f"   • Average time per problem: {total_eval_time/len(problems):.2f}s")
+    
     return results
 
 
 def run_baseline_evaluation_prime_samples(model_name: str, problems: list[PrimeSample],
                                           max_new_tokens: int = 100, batch_size: int = 1, seed: int = 42):
     r = random.Random(seed)
-    return run_baseline_evaluation_problems(
+    return run_baseline_evaluation(
         model_name, [Problem.from_prime_sample(ps, r.choice(['x', 'y'])) for ps in problems], max_new_tokens,
         batch_size
     )
 
 
-def run_baseline_evaluation_problems(model_name: str, problems: list[Problem],
-                                     max_new_tokens: int = 100, batch_size: int = 1):
-    pass
+def run_baseline_evaluation_random_problems(model_name: str, num_problems: int = 100,
+                                            max_new_tokens: int = 100, batch_size: int = 1, seed: int = 42):
+    return run_baseline_evaluation(
+        model_name, generate_problems(n=num_problems, primes=PRIMES[:10], seed=seed), max_new_tokens,
+        batch_size
+    )
 
 
 def run_baseline_evaluation(model_name: str, problems: list[Problem],
-                            max_new_tokens: int = 100, batch_size: int = 1) -> Dict[str, Any]:
-    """Run the baseline evaluation for a specified model."""
-    if primes is None:
-        primes = [3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53]
-
-    # Generate problems
-    problems = generate_problems(num_problems, primes, seed)
-
-    # Evaluate model
+                            max_new_tokens: int = 100, batch_size: int = 1):
     return evaluate_model(
         model_name=model_name,
         problems=problems,
@@ -177,24 +211,18 @@ def run_baseline_evaluation(model_name: str, problems: list[Problem],
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Evaluate language models on modular inverse problems")
-    parser.add_argument("--model", type=str, default="gpt2", help="HuggingFace model name")
+    parser.add_argument("--model", type=str, default="Qwen/Qwen3-1.7B", help="HuggingFace model name")
     parser.add_argument("--num_problems", type=int, default=20, help="Number of problems to generate")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
-    parser.add_argument("--output_dir", type=str, default="results", help="Directory to save results")
-    parser.add_argument("--max_new_tokens", type=int, default=100, help="Maximum new tokens for generation")
     parser.add_argument("--batch_size", type=int, default=1, help="Batch size for inference")
-    parser.add_argument("--no_save_responses", action="store_true", help="Do not save full model responses")
 
     args = parser.parse_args()
 
-    results = run_baseline_evaluation(
+    results = run_baseline_evaluation_random_problems(
         model_name=args.model,
         num_problems=args.num_problems,
         seed=args.seed,
-        output_dir=args.output_dir,
-        max_new_tokens=args.max_new_tokens,
         batch_size=args.batch_size,
-        save_responses=not args.no_save_responses
     )
 
     print(f"Evaluation complete for {args.model}")
