@@ -94,7 +94,7 @@ def evaluate_model(model_name: str, problems: List[Problem], max_new_tokens: int
             with torch.no_grad():
                 batch_outputs = model.generate(
                     **batch_inputs,
-                    max_new_tokens=1000
+                    max_new_tokens=max_new_tokens
                 )
             end_time = time.time()
             
@@ -212,7 +212,8 @@ def run_baseline_evaluation(model_name: str, problems: list[Problem],
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Evaluate language models on modular inverse problems")
     parser.add_argument("--model", type=str, default="Qwen/Qwen3-3B", help="HuggingFace model name")
-    parser.add_argument("--num_problems", type=int, default=20, help="Number of problems to generate")
+    parser.add_argument("--num_problems", type=int, default=20, help="Number of problems to generate")z
+    parser.add_argument("--max-new-tokens", type=int, default=500, help="Number of problems to generate")z
     parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
     parser.add_argument("--batch_size", type=int, default=8, help="Batch size for inference")
 
@@ -223,6 +224,7 @@ if __name__ == "__main__":
         num_problems=args.num_problems,
         seed=args.seed,
         batch_size=args.batch_size,
+        max_new_tokens=args.max_new_tokens,
     )
 
     print(f"Evaluation complete for {args.model}")
