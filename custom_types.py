@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing import Literal, Optional
+from typing import Generic, Literal, Optional, TypeVar
 from jaxtyping import Int
 from torch import Tensor
 
@@ -33,19 +33,32 @@ class Role(Enum):
     SOLVER = "SOLVER"
     PROPOSER = "PROPOSER"
 
-@dataclass
-class IOPair:
-    input_str: str
-    output_str: str
-
+T = TypeVar("T")
 
 @dataclass
-class Sample:
+class IOPair(Generic[T]):
+    input_str: T
+    output_str: T
+
+@dataclass
+class BaseSample:
     snippet: str
-    function_io: list[IOPair]
+    message: str
+    prompt_tokens: list[str]
+
+@dataclass
+class FunctionSample(BaseSample):
+    snippet: str
+    function_io: list[IOPair[str]]
     input_types: Literal["str", "int", "list", "tuple"]
     output_types: Literal["str", "int", "list", "tuple"]
     message: str
     imports: str  # executable string
     prompt_tokens: list[str]
-    sample_ids: Int[Tensor, "seq_len"]
+
+@dataclass
+class PrimeSample(BaseSample):
+    @property
+    def prime(self) -> int : 
+        return int(self.snippet)
+    function_io: list[IOPair[int]]

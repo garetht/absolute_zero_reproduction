@@ -44,6 +44,10 @@ class MegaBuffer:
     induction_buffer: InductionBuffer
     abduction_buffer: AbductionBuffer
     deduction_buffer: DeductionBuffer
+    logprobs: Int[Tensor, "role task batch_size vocab_size"]
+    sample_ids: Int[Tensor, "role task batch_size seq_len"]
+    # TODO
+    def get_minibatch(): 
 
     def sample_from_buffer(self, buffer: TaskType, num_to_sample: int) -> list[Sample]:
         samples = []
