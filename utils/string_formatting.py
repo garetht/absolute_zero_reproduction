@@ -1,13 +1,13 @@
-from custom_types import Sample, TaskType
-def format_for_induction(program: Sample) -> str:
+from custom_types import BaseSample, TaskType
+def format_for_induction(program: BaseSample) -> str:
     pass
 
-def format_for_abduction(program: Sample) -> str:
+def format_for_abduction(program: BaseSample) -> str:
     pass
 
-def format_for_deduction(program: Sample) -> str:
+def format_for_deduction(program: BaseSample) -> str:
     pass
 
-def format_task_prompts(sample: list[Sample], task_type: TaskType) -> list[str]:
+def format_task_prompts(sample: list[BaseSample], task_type: TaskType) -> list[str]:
     pass
 
