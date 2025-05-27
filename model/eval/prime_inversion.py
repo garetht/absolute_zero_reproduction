@@ -45,7 +45,15 @@ class Problem:
     # For reproducible display
     desc: str = field(default='')
 
-    def to_prime_sample(self) -> PrimeSample:
+    def __repr__(self) -> str:
+        """Return a nicely formatted string representation of the problem."""
+        if self.blank == 'x':
+            return f"Find x such that x * {self.y} ≡ 1 (mod {self.prime})"
+        else:
+            return f"Find y such that {self.x} * y ≡ 1 (mod {self.prime})"
+
+
+def to_prime_sample(self) -> PrimeSample:
         """Convert this Problem instance to a PrimeSample."""
         # This is a placeholder implementation as PrimeSample structure is not fully defined
         # You may need to adjust based on the actual PrimeSample structure

@@ -72,7 +72,6 @@ class Evaluator:
                                 prompt: str, batch_time: float, batch_size: int) -> Dict[str, Any]:
         """Process the result for a single problem."""
         response = self.tokenizer.decode(outputs, skip_special_tokens=True)
-        print("the model's response is: ", response)
 
         # Get the part of the response that comes after the prompt
         model_response = response[len(prompt):]
@@ -86,6 +85,9 @@ class Evaluator:
         if extracted_answer is not None:
             # Check if answers are equivalent modulo prime
             is_correct = (extracted_answer % problem.prime) == (correct_answer % problem.prime)
+
+        print(
+            f"""{"Correct" if is_correct else "Wrong"} Problem {problem}, Model Response {extracted_answer}, Correct Answer {correct_answer}""")
 
         return {
             "problem": problem.desc,
