@@ -96,7 +96,10 @@ def run_baseline_evaluation(model_name: str, problems: list[Problem],
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Evaluate language models on modular inverse problems")
+    parser = argparse.ArgumentParser(
+        description="Evaluate language models on modular inverse problems",
+        epilog="Usage example: PYTHONPATH=. python model/eval/baselines.py --model=Qwen/Qwen2.5-3B-Instruct --batch_size=10"
+    )
     parser.add_argument("--model", type=str, default="Qwen/Qwen2.5-0.5B-Instruct", help="HuggingFace model name")
     parser.add_argument("--num_problems", type=int, default=20, help="Number of problems to generate")
     parser.add_argument("--max-new-tokens", type=int, default=500, help="Number of problems to generate")
