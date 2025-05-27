@@ -17,22 +17,22 @@ from model.eval.test_prime_inversion import PRIMES
 def create_prompt(problem: Problem) -> str:
     """Create a prompt for the given problem."""
     if problem.blank == 'x':
-        prompt = f"""I'm working with modular arithmetic. Given a prime number p and an integer y, I need to find x such that:
+        prompt = f"""Given a prime number p and an integer y, I need to find x such that:
 
 x * {problem.y} ≡ 1 (mod {problem.prime})
 
 What is the value of x?
 
-Provide your answer as a single unformatted number within <answer></answer> tags.
+You must provide your answer as a single unformatted number within <answer></answer> tags, e.g. <answer>x</answer>
 """
     else:  # problem.blank == 'y'
-        prompt = f"""I'm working with modular arithmetic. Given a prime number p and an integer x, I need to find y such that:
+        prompt = f"""Given a prime number p and an integer x, I need to find y such that:
 
 {problem.x} * y ≡ 1 (mod {problem.prime})
 
 What is the value of y?
 
-Provide your answer as a single unformatted number within <answer></answer> tags.
+You must provide your answer as a single unformatted number within <answer></answer> tags, e.g. <answer>x</answer>.
 """
     return prompt
 
@@ -211,10 +211,10 @@ def run_baseline_evaluation(model_name: str, problems: list[Problem],
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Evaluate language models on modular inverse problems")
-    parser.add_argument("--model", type=str, default="Qwen/Qwen3-1.7B", help="HuggingFace model name")
+    parser.add_argument("--model", type=str, default="Qwen/Qwen3-3B", help="HuggingFace model name")
     parser.add_argument("--num_problems", type=int, default=20, help="Number of problems to generate")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
-    parser.add_argument("--batch_size", type=int, default=1, help="Batch size for inference")
+    parser.add_argument("--batch_size", type=int, default=8, help="Batch size for inference")
 
     args = parser.parse_args()
 
