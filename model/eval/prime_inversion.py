@@ -53,10 +53,8 @@ class Problem:
             return f"Find y such that {self.x} * y ≡ 1 (mod {self.prime})"
 
 
-def to_prime_sample(self) -> PrimeSample:
+    def to_prime_sample(self) -> PrimeSample:
         """Convert this Problem instance to a PrimeSample."""
-        # This is a placeholder implementation as PrimeSample structure is not fully defined
-        # You may need to adjust based on the actual PrimeSample structure
         return PrimeSample(
             snippet=str(self.prime),
             function_io=[{
