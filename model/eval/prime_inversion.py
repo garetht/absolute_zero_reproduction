@@ -4,6 +4,8 @@ from dataclasses import field, dataclass
 from typing import Optional
 from typing_extensions import Literal
 
+from custom_types import PrimeSample
+
 
 def solve_modular_inverse(p: int, x=None, y=None, verbose: bool = False):
     """
@@ -43,6 +45,15 @@ class Problem:
     # For reproducible display
     desc: str = field(default='')
 
+    @staticmethod
+    def from_prime_sample(prime_sample: PrimeSample, blank: Literal['x', 'y']) -> 'Problem':
+        return Problem(
+            prime=prime_sample.prime,
+            x=prime_sample.function_io[0].input_str,
+            y=prime_sample.function_io[0].output_str,
+            blank=blank
+        )
+    
 
 def modular_inverse(a: int, p: int) -> int:
     # Using Fermat's little theorem to compute modular inverse: a^(p-2) mod p
