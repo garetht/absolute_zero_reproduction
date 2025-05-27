@@ -1,0 +1,2 @@
+export HF_ALLOW_CODE_EVAL=1
+python humaneval_plus.py
