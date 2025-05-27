@@ -1,5 +1,7 @@
 from dataclasses import dataclass
 from enum import Enum
+from typing_extensions import TypedDict
+
 from typing import Generic, Literal, Optional, TypeVar
 from jaxtyping import Int
 from torch import Tensor
@@ -62,3 +64,11 @@ class PrimeSample(BaseSample):
     def prime(self) -> int : 
         return int(self.snippet)
     function_io: list[IOPair[int]]
+
+
+class ProblemResult(TypedDict):
+    problem: str
+    extracted_answer: Optional[int]
+    correct_answer: Optional[int]
+    is_correct: bool
+    time_seconds: float

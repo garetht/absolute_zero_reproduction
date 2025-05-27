@@ -7,6 +7,7 @@ from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from typing import List, Dict, Any, Optional
 
+from custom_types import ProblemResult
 from model.eval.problem import Problem
 from model.eval.prompts import create_prompt
 
@@ -31,7 +32,9 @@ class Evaluator:
         self.tokenizer = tokenizer
         self.model_name = model.config.name_or_path
 
-    def _process_batch(self, batch_problems: List[Problem], batch_idx: int, total_batches: int) -> tuple:
+    def _process_batch(self, batch_problems: List[Problem], batch_idx: int, total_batches: int) -> tuple[
+        torch.Tensor, List[str], float]:
+
         """Process a single batch of problems."""
         batch_prompts = [create_prompt(prob) for prob in batch_problems]
 
@@ -59,7 +62,7 @@ class Evaluator:
         return batch_outputs, batch_prompts, batch_time
 
     def _process_problem_result(self, problem: Problem, outputs: torch.Tensor,
-                                prompt: str, batch_time: float, batch_size: int) -> Dict[str, Any]:
+                                prompt: str, batch_time: float, batch_size: int) -> ProblemResult:
         """Process the result for a single problem."""
         response = self.tokenizer.decode(outputs, skip_special_tokens=True)
 
@@ -91,10 +94,13 @@ class Evaluator:
         }
 
     def _print_batch_summary(self, batch_idx: int, batch_correct: int, batch_size: int,
+                             no_responses: int,
                              overall_correct: int, total_processed: int):
         """Print summary for the current batch."""
         batch_accuracy = batch_correct / batch_size
-        print(f"📈 Batch {batch_idx + 1} results: {batch_correct}/{batch_size} correct ({batch_accuracy:.1%})")
+        batch_responded_accuracy = batch_correct / (batch_size - no_responses)
+        print(
+            f"📈 Batch {batch_idx + 1} results: {batch_correct}/{batch_size} correct ({batch_accuracy:.1%}) ({batch_responded_accuracy:.1%} of responded)")
 
         current_overall_accuracy = overall_correct / total_processed
         print(f"📊 Overall progress: {overall_correct}/{total_processed} correct ({current_overall_accuracy:.1%})")
@@ -136,6 +142,7 @@ class Evaluator:
         results = {
             "model": self.model_name,
             "correct": 0,
+            "no_response": 0,
             "total": len(problems),
             "timestamp": datetime.now().isoformat(),
             "problems": [],
@@ -164,6 +171,8 @@ class Evaluator:
                     if problem_result["is_correct"]:
                         results["correct"] += 1
                         batch_correct += 1
+                    if problem_result["extracted_answer"] is None:
+                        results["no_response"] += 1
 
                     results["problems"].append(problem_result)
 
@@ -179,7 +188,7 @@ class Evaluator:
 
                 # Print batch summary
                 self._print_batch_summary(
-                    batch_idx, batch_correct, len(batch_problems),
+                    batch_idx, batch_correct, len(batch_problems), results["no_response"],
                     results["correct"], len(results["problems"])
                 )
 
