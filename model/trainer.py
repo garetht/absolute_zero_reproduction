@@ -16,6 +16,7 @@ from model.compute.reward import compute_r_total
 from model.inference import generate_response, generate_response_bulk
 from custom_types import Answer, TaskType, Reward
 from utils.validate_by_executing import validate_by_executing_induction, validate_by_executing_deduction_abduction
+from utils.string_formatting import format_task_prompts
 
 
 def create_optimizer_and_scheduler() -> torch.optim.Optimizer:
@@ -46,8 +47,7 @@ def create_sample_from_answer(answer: Answer, task_type: TaskType) -> Sample:
     pass
 
 
-def format_task_prompts(sample: list[Sample]) -> list[str]:
-    pass
+
 
 
 class AZRTrainer:
@@ -156,15 +156,7 @@ class AZRTrainer:
 
         return responses
 
-    def _format_for_induction(self, program: Sample) -> str:
-        pass
-
-    def _format_for_abduction(self, program: Sample) -> str:
-        pass
-
-    def _format_for_deduction(self, program: Sample) -> str:
-        pass
-
+   
     def learning_phase(self, buffer: BaseBuffer) -> None:
         """
         Execute the learning phase of AZR training.
