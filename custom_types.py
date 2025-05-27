@@ -15,12 +15,7 @@ class Answer:
     input: Optional[str]
     program: str
     output: Optional[str]
-
-
-@dataclass
-class Reward:
-    formatting: float
-    correctness: float
+    reward: float
 
 
 class TaskType(Enum):
@@ -39,6 +34,7 @@ T = TypeVar("T")
 class IOPair(Generic[T]):
     input_str: T
     output_str: T
+
 
 @dataclass
 class BaseSample:
