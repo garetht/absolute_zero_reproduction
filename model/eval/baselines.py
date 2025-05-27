@@ -66,10 +66,9 @@ Given a prime number p and an integer y, find x such that:
 
 x * {problem.y} ≡ 1 (mod {problem.prime})
 
-For example, if p = 11 and y = 2, then 6 * 2 ≡ 1 (mod 11), so <answer>6</answer> is the answer.
-For example, if p = 13 and y = 5, then 10 * 5 ≡ 1 (mod 13), so <answer>10</answer> is the answer.
-
-Provide your answer as a single unformatted number within <answer></answer> tags, e.g. <answer>x</answer><|im_end|>
+Provide your answer as a single boxed number e.g. \[
+\\boxed{{x}}
+\]<|im_end|>
 <|im_start|>assistant
 """
     else:  # problem.blank == 'y'
@@ -78,10 +77,9 @@ Given a prime number p and an integer x, find y such that:
 
 {problem.x} * y ≡ 1 (mod {problem.prime})
 
-For example, if p = 11 and x = 6, then 6 * 2 ≡ 1 (mod 11), so <answer>2</answer> is the answer.
-For example, if p = 13 and x = 10, then 10 * 5 ≡ 1 (mod 13), so <answer>5</answer> is the answer.
-
-Provide your answer as a single unformatted number within <answer></answer> tags, e.g. <answer>x</answer><|im_end|>
+Provide your answer as a single boxed number within e.g. \[
+\\boxed{{x}}
+\]<|im_end|>
 <|im_start|>assistant
 """
     return prompt
@@ -96,21 +94,13 @@ e.g. <answer>x</answer>
     """
 
 
-def extract_answer(response: str) -> Optional[int]:
-    """Extract the answer from the model's response."""
-    match = re.search(r'<answer>(.*?)</answer>', response, re.DOTALL)
-    if match:
-        try:
-            # Try to extract and convert to int
-            answer_text = match.group(1).strip()
-            # Handle potential expressions or calculations
-            if "=" in answer_text:
-                # If there's an equality, take the right side
-                answer_text = answer_text.split("=")[-1].strip()
-            return int(answer_text)
-        except ValueError:
-            return None
-    return None
+def extract_boxed_number(text) -> Optional[int]:
+    # Regex pattern to match \boxed{<number>} and extract the number
+    regexp_match = re.search(r"\\boxed\{([+-]?\d+)\}", text)
+    if regexp_match:
+        return int(regexp_match.group(1))
+    else:
+        return None
 
 
 def evaluate_model(model_name: str, problems: List[Problem], max_new_tokens: int = 100,
@@ -191,7 +181,7 @@ def evaluate_model(model_name: str, problems: List[Problem], max_new_tokens: int
                 model_response = response[len(batch_prompts[j]):]
 
                 # Extract answer
-                extracted_answer = extract_answer(model_response)
+                extracted_answer = extract_boxed_number(model_response)
 
                 correct_answer = problem.x if problem.blank == 'x' else problem.y
 
