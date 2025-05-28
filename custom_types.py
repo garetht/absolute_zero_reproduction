@@ -20,14 +20,14 @@ class Answer:
 
 
 class TaskType(Enum):
-    DEDUCTION = "DEDUCTION"
-    ABDUCTION = "ABDUCTION"
-    INDUCTION = "INDUCTION"
+    DEDUCTION = 0
+    ABDUCTION = 1
+    INDUCTION = 2
 
 
 class Role(Enum):
-    SOLVER = "SOLVER"
-    PROPOSER = "PROPOSER"
+    SOLVER = 0
+    PROPOSER = 1
 
 
 T = TypeVar("T")

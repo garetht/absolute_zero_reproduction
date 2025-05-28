@@ -11,7 +11,7 @@ from transformers import AutoModelForCausalLM
 from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
 from jaxtyping import Float, Int
 
-from buffer.base_buff import BaseBuffer, MegaBuffer, 
+from buffer.base_buff import BaseBuffer, MegaBuffer,
 from model.args import AZRArgs
 from model.compute.advantages import compute_advantages
 from model.compute.reward import compute_r_total
@@ -84,7 +84,7 @@ class AZRTrainer:
         importance_ratio = (new_logprobs - old_logprobs).exp()  # shape: (role, task, minibatch_size, seq_len)
         non_clipped = advantages * importance_ratio  # shape: (role, task, minibatch_size, seq_len, )
         # compute the clipped objective
-        clipped = advantages.clamp(-self.args.clip_ratio, self.args.clip_ratio) * importance_ratio # shape: (role, task, minibatch_size, seq_len, 
+        clipped = advantages.clamp(-self.args.clip_ratio, self.args.clip_ratio) * importance_ratio # shape: (role, task, minibatch_size, seq_len,
         return torch.minimum(non_clipped, clipped).mean()  # shape: ()
 
     def rollout_phase(self) -> Float[torch.Tensor, "role task batch_size"]:
@@ -101,13 +101,13 @@ class AZRTrainer:
         proposer_format_correctness_rewards = torch.tensor((len(TaskType), self.args.train_batch_size))
         all_rewards = torch.tensor((len(TaskType), self.args.train_batch_size))
         self.step += 1
-        for i in range(self.args.train_batch_size):
+        for batch_idx in range(self.args.train_batch_size):
             program = self.mega_buffer.sample_abduction_deduction()
-            
+
             # INDUCTION
             io_pairs, induction_logprobs, induction_sample_ids = self.generate_io_pairs(program, self.args.n_samples_to_estimate_task_accuracy)
             valid_pairs, induct_proposer_format_reward = validate_by_executing_induction(io_pairs)
-            
+
 
             sample = format_sample_from_io_pairs([io for io in valid_pairs])
             self.mega_buffer.seed_buffer.append(sample)
@@ -115,12 +115,12 @@ class AZRTrainer:
             # ABDUCTION and DEDUCTION
             abduction_response, abduction_logprobs, abduction_sample_ids = self.propose_task(TaskType.ABDUCTION)
             deduction_response, deduction_logprobs, deduction_sample_ids = self.propose_task(TaskType.DEDUCTION)
-            
+
             # validate the responses have correct formatting, and run,  create answer objects during this proccess 
             abduction_answer = validate_formatting_and_correctness(abduction_response, TaskType.ABDUCTION)
             deduction_answer = validate_formatting_and_correctness(deduction_response, TaskType.DEDUCTION)
-            
-            
+
+
 
             # if the abduction answer has valid formatting
             if abduction_answer.reward >= 0:
@@ -138,38 +138,38 @@ class AZRTrainer:
             for idx, task_type in enumerate(TaskType):
                 match task_type:
                     case TaskType.ABDUCTION:
-                        self.mega_buffer.logprobs[0, idx, i, ...] = abduction_logprobs
+                        self.mega_buffer.logprobs[Role.PROPOSER.value, task_type.value, batch_idx, ...] = abduction_logprobs
                         # write the rewards to proposer_format_correctness_rewards
-                        proposer_format_correctness_rewards[idx, i] = abduction_answer.reward
-                        self.mega_buffer.sample_ids[0, idx, i, ...] = abduction_sample_ids
+                        proposer_format_correctness_rewards[task_type.value, batch_idx] = abduction_answer.reward
+                        self.mega_buffer.sample_ids[Role.PROPOSER.value, task_type.value, batch_idx, ...] = abduction_sample_ids
                     case TaskType.DEDUCTION:
-                        self.mega_buffer.logprobs[0, idx, i, ...] = deduction_logprobs
-                        proposer_format_correctness_rewards[idx, i] = deduction_answer.reward
-                        self.mega_buffer.sample_ids[0, idx, i, ...] = deduction_sample_ids
+                        self.mega_buffer.logprobs[Role.PROPOSER.value, task_type.value, batch_idx, ...] = deduction_logprobs
+                        proposer_format_correctness_rewards[task_type.value, batch_idx] = deduction_answer.reward
+                        self.mega_buffer.sample_ids[Role.PROPOSER.value, task_type.value, batch_idx, ...] = deduction_sample_ids
                     case TaskType.INDUCTION:
-                        self.mega_buffer.logprobs[0, idx, i, ...] = induction_logprobs
-                        proposer_format_correctness_rewards[idx, i] = induct_proposer_format_reward
-                        self.mega_buffer.sample_ids[0, idx, i, ...] = induction_sample_ids
+                        self.mega_buffer.logprobs[Role.PROPOSER.value, task_type.value, batch_idx, ...] = induction_logprobs
+                        proposer_format_correctness_rewards[task_type.value, batch_idx] = induct_proposer_format_reward
+                        self.mega_buffer.sample_ids[Role.PROPOSER.value, task_type.value, batch_idx, ...] = induction_sample_ids
 
         # SOLVE PROBLEMS
-        for i, task_type in enumerate(TaskType):
+        for task_type in TaskType:
             samples: list[BaseSample] = self.mega_buffer.solver_sample_from_buffer(self.args.train_batch_size)
             task_prompts = format_task_prompts(samples,task_type)
             responses, logprobs, sample_ids, prompt_ids = generate_response_bulk(self.args, self.training_model, self.tokenizer, task_prompts)
             # write logprobs to the mega buffer
             # megabuffer.logprobs shape : (role task batch_size seq_len vocab_size)
             # logprobs obj shape (batchsize seq_len vocab_size)
-            self.mega_buffer.logprobs[1, i, ...] = logprobs
-            self.mega_buffer.sample_ids[1, i, ...] = sample_ids
-            r_format_proposer = proposer_format_correctness_rewards[i, ...]  # shape: (batch_size)
+            self.mega_buffer.logprobs[Role.SOLVER.value, task_type.value, ...] = logprobs
+            self.mega_buffer.sample_ids[Role.SOLVER.value, task_type.value, ...] = sample_ids
+            r_format_proposer = proposer_format_correctness_rewards[task_type.value, ...]  # shape: (batch_size)
             # compute rewards
             # one reward per task type per batch item
-            for j, role in enumerate(Role):
+            for role in Role:
                 # we want to pass proposer_format rewards and samples, from which we can compute r_solve
                 # TODO - compute formatting rewards for the solver response before rtotal?
                 # ie convert response to answer objects (which store the formatting reward)
-                all_rewards[j][i] = compute_r_total(samples, responses, role, r_format_proposer)
-         
+                all_rewards[role.value][task_type.value] = compute_r_total(samples, responses, role, r_format_proposer)
+
         return all_rewards  # shape: (role, task, batch_size)
 
 
@@ -194,7 +194,7 @@ class AZRTrainer:
         program.prompt_tokens = prompt_tokens
         return io_pairs, logprobs, sample_ids
 
-   
+
     def learning_phase(self) -> None:
         """
         Execute the learning phase of AZR training.
@@ -204,8 +204,8 @@ class AZRTrainer:
         
         Args:
             buffer (Buffer): Buffer containing rollout data to learn from.
-        """        
-        
+        """
+
         all_rewards = self.rollout_phase()
         # now do minibatch policy updates
         for mini_batch in self.mega_buffer.get_minibatches(self.args):
@@ -217,7 +217,7 @@ class AZRTrainer:
             )
             logprobs = remove_dvocab_from_logprobs(logprobs, sample_ids)
             advantages = compute_advantages(self.args, all_rewards) # shape role task minibatch_size
-            objective = self.compute_azr_objective(advantages, logprobs, sample_ids, 
+            objective = self.compute_azr_objective(advantages, logprobs, sample_ids,
                                                    mini_batch)
             self.optimizer.zero_grad()
             objective.backward()
