@@ -51,7 +51,9 @@ class AZRArgs:
     rollout_top_p: float = 1.0
     k_references: int = 6
     n_samples_to_estimate_task_accuracy: int = 8
+    # our params
     n_minibatches: int = 16
     minibatch_size: int = 8
     batch_size = minibatch_size*n_minibatches
     d_vocab: int = 50257  # Default for GPT-2 and similar models
+    clip_ratio: float = 0.2
