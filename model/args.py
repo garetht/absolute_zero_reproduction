@@ -1,10 +1,13 @@
 from dataclasses import dataclass
 
 import constants
-
+import torch
 
 @dataclass
 class AZRArgs:
+    d_vocab: int  # Default for GPT-2 and similar models
+    dtype: torch.dtype = torch.bfloat16
+
     # Basic / global
     seed: int = constants.RANDOM_SEED
     run_name: str = "AZR-Run"
@@ -16,7 +19,6 @@ class AZRArgs:
 
     # Duration of different phases
     total_phases: int = 100
-    batch_size: int = 128
 
     # Optimization hyperparameters
     max_grad_norm: float = 1.0
@@ -32,13 +34,12 @@ class AZRArgs:
 
     # Model Configuration
     max_prompt_length: int = 6144
-    max_response_length: int = 8096
+    max_response_length: int = 128
     seed_batch_factor: int = 4
     max_programs: int = 16384
 
     # Training Settings
     lr: float = 1e-6
-    train_batch_size: int = 64 * 6
     grad_clip: float = 1.0
     total_steps: int = 500
 
@@ -51,9 +52,8 @@ class AZRArgs:
     k_references: int = 6
     n_samples_to_estimate_task_accuracy: int = 8
     # our params
-    n_minibatches: int = 16
-    minibatch_size: int = 8
+    n_minibatches: int = 8
+    minibatch_size: int = 4
     batch_size = minibatch_size * n_minibatches
-    d_vocab: int = 50257  # Default for GPT-2 and similar models
     clip_ratio: float = 0.2
     eps: float = 1e-5

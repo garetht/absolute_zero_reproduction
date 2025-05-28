@@ -49,7 +49,7 @@ class Evaluator:
 
         start_time = time.time()
         # Use generate_response_bulk instead of model.generate
-        responses, logprobs, gen_ids, prompt_ids = generate_response_bulk(
+        responses, logprobs, gen_ids, prompt_ids, attention_masks = generate_response_bulk(
             self.args,
             self.model,
             self.tokenizer,
@@ -238,7 +238,7 @@ def evaluate_model_from_name(
     )
 
     model = AutoModelForCausalLM.from_pretrained(
-        model_name, torch_dtype=torch.float16, device_map="auto"
+        model_name, torch_dtype=args.dtype, device_map="auto"
     )
     tokenizer = AutoTokenizer.from_pretrained(model_name, padding_side="left")
 

@@ -6,6 +6,7 @@ language models using the AZR methodology. It provides functionality for
 rollout phases, learning phases, and objective computation.
 """
 import torch
+import wandb
 from jaxtyping import Float, Int
 from transformers import AutoModelForCausalLM
 from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
@@ -17,6 +18,7 @@ from model.args import AZRArgs
 from model.compute.advantages import compute_advantages
 from model.compute.reward import compute_r_total
 from model.inference import generate_response, generate_response_bulk, remove_dvocab_from_logprobs
+from model.eval.baselines import run_baseline_evaluation_prime_samples
 from utils.string_formatting import validate_proposer_formatting_and_correctness, \
     create_sample_from_answer, format_as_string, validate_single_response, CHECK_MAP
 
@@ -88,11 +90,23 @@ class AZRTrainer:
         old_logprobs = minibatch.logprobs.gather(-1, new_sample_ids.unsqueeze(-1)).squeeze(
             -1)  # shape: (role, task, minibatch_size, seq_len)
         importance_ratio = (new_logprobs - old_logprobs).exp()  # shape: (role, task, minibatch_size, seq_len)
-        non_clipped = advantages * importance_ratio  # shape: (role, task, minibatch_size, seq_len, )
+
+        # Apply attention masks to zero out padded positions
+        attention_masks = minibatch.attention_masks.float()  # shape: (role, task, minibatch_size, seq_len)
+        masked_importance_ratio = importance_ratio * attention_masks
+
+        non_clipped = advantages * masked_importance_ratio  # shape: (role, task, minibatch_size, seq_len, )
         # compute the clipped objective
         clipped = advantages.clamp(-self.args.clip_ratio,
-                                   self.args.clip_ratio) * importance_ratio  # shape: (role, task, minibatch_size, seq_len,
-        return torch.minimum(non_clipped, clipped).mean()  # shape: ()
+                                   self.args.clip_ratio) * masked_importance_ratio  # shape: (role, task, minibatch_size, seq_len,
+
+        # Use attention masks for proper averaging - only count valid positions
+        objective_per_position = torch.minimum(non_clipped, clipped)
+        valid_positions = attention_masks.sum()  # Total number of valid positions
+        if valid_positions > 0:
+            return (objective_per_position * attention_masks).sum() / valid_positions  # Masked average
+        else:
+            return torch.tensor(0.0, device=objective_per_position.device)  # Fallback if no valid positions
 
     def rollout_phase(self) -> Float[torch.Tensor, "role task batch_size"]:
         """
@@ -104,25 +118,28 @@ class AZRTrainer:
         Returns:
             BaseBuffer: BaseBuffer containing rollout data for the learning phase.
         """
-        proposer_format_correctness_rewards = torch.tensor((len(TaskType), self.args.train_batch_size), device=DEVICE)
-        all_rewards = torch.tensor((len(TaskType), self.args.train_batch_size), device=DEVICE)
-        self.step += 1
+        proposer_format_correctness_rewards = torch.zeros((len(TaskType), self.args.batch_size), device=DEVICE)
+        all_rewards = torch.zeros((len(Role), len(TaskType), self.args.batch_size), device=DEVICE)
 
-        for batch_idx in range(self.args.train_batch_size):
+        for batch_idx in range(self.args.batch_size):
             induction_sample: PrimeSample = self.mega_buffer.sample_from_buffer(num_to_sample=1)[0]
+            print(induction_sample)
 
             # INDUCTION
-            valid_pairs, induction_logprobs, induction_sample_ids, induction_prompt_tokens, induction_answers = self.generate_and_validate_io_pairs(
+            valid_pairs, induction_logprobs, induction_sample_ids, induction_prompt_tokens, induction_answers, induction_attention_mask = self.generate_and_validate_io_pairs(
                 induction_sample,
                 self.args.n_samples_to_estimate_task_accuracy)
 
-            sample = format_sample_from_io_pairs(induction_sample.prime, induction_prompt_tokens,
-                                                 [io for io in valid_pairs])
-            self.mega_buffer.buffer.append(sample)
+            if len(valid_pairs) > 0:
+                sample = format_sample_from_io_pairs(induction_sample.prime, induction_prompt_tokens,
+                                                     [io for io in valid_pairs])
+                self.mega_buffer.buffer.append(sample)
 
             # ABDUCTION and DEDUCTION
-            abduction_response, abduction_logprobs, abduction_sample_ids = self.propose_task(TaskType.ABDUCTION)
-            deduction_response, deduction_logprobs, deduction_sample_ids = self.propose_task(TaskType.DEDUCTION)
+            abduction_response, abduction_logprobs, abduction_sample_ids, abduction_attention_mask = self.propose_task(
+                TaskType.ABDUCTION)
+            deduction_response, deduction_logprobs, deduction_sample_ids, deduction_attention_mask = self.propose_task(
+                TaskType.DEDUCTION)
 
             # validate the responses have correct formatting, and run,  create answer objects during this proccess
             abduction_answer = validate_proposer_formatting_and_correctness(abduction_response, TaskType.ABDUCTION)
@@ -150,12 +167,17 @@ class AZRTrainer:
                         proposer_format_correctness_rewards[task_type.value, batch_idx] = abduction_answer.reward
                         self.mega_buffer.sample_ids[
                             Role.PROPOSER.value, task_type.value, batch_idx, ...] = abduction_sample_ids
+                        self.mega_buffer.attention_masks[
+                            Role.PROPOSER.value, task_type.value, batch_idx, ...] = abduction_attention_mask
                     case TaskType.DEDUCTION:
                         self.mega_buffer.logprobs[
                             Role.PROPOSER.value, task_type.value, batch_idx, ...] = deduction_logprobs
+
                         proposer_format_correctness_rewards[task_type.value, batch_idx] = deduction_answer.reward
                         self.mega_buffer.sample_ids[
                             Role.PROPOSER.value, task_type.value, batch_idx, ...] = deduction_sample_ids
+                        self.mega_buffer.attention_masks[
+                            Role.PROPOSER.value, task_type.value, batch_idx, ...] = deduction_attention_mask
                     case TaskType.INDUCTION:
                         self.mega_buffer.logprobs[
                             Role.PROPOSER.value, task_type.value, batch_idx, ...] = induction_logprobs
@@ -164,18 +186,23 @@ class AZRTrainer:
                             [a.reward for a in induction_answers], device=DEVICE).mean()
                         self.mega_buffer.sample_ids[
                             Role.PROPOSER.value, task_type.value, batch_idx, ...] = induction_sample_ids
+                        self.mega_buffer.attention_masks[
+                            Role.PROPOSER.value, task_type.value, batch_idx, ...] = induction_attention_mask
 
         # SOLVE PROBLEMS
         for task_type in TaskType:
-            samples: list[PrimeSample] = self.mega_buffer.sample_from_buffer(num_to_sample=self.args.train_batch_size)
+            samples: list[PrimeSample] = self.mega_buffer.sample_from_buffer(num_to_sample=self.args.batch_size)
             task_prompts = [format_as_string(s, task_type, Role.SOLVER) for s in samples]
-            responses, logprobs, sample_ids, prompt_ids = generate_response_bulk(self.args, self.training_model,
-                                                                                 self.tokenizer, task_prompts)
+            responses, logprobs, sample_ids, prompt_ids, attention_masks = generate_response_bulk(self.args,
+                                                                                                  self.training_model,
+                                                                                                  self.tokenizer,
+                                                                                                  task_prompts)
             # write logprobs to the mega buffer
             # megabuffer.logprobs shape : (role task batch_size seq_len vocab_size)
             # logprobs obj shape (batchsize seq_len vocab_size)
             self.mega_buffer.logprobs[Role.SOLVER.value, task_type.value, ...] = logprobs
             self.mega_buffer.sample_ids[Role.SOLVER.value, task_type.value, ...] = sample_ids
+            self.mega_buffer.attention_masks[Role.SOLVER.value, task_type.value, ...] = attention_masks
             r_format_proposer = proposer_format_correctness_rewards[task_type.value, ...]  # shape: (batch_size)
             # compute rewards
             # one reward per task type per batch item
@@ -183,32 +210,37 @@ class AZRTrainer:
                 # we want to pass proposer_format rewards and samples, from which we can compute r_solve
                 # TODO - compute formatting rewards for the solver response before rtotal?
                 # ie convert response to answer objects (which store the formatting reward)
-                all_rewards[role.value][task_type.value] = compute_r_total(samples, responses, role, task_type,
+                all_rewards[role.value][task_type.value] = compute_r_total(self.args, samples, responses, role,
+                                                                           task_type,
                                                                            r_format_proposer)
 
         return all_rewards  # shape: (role, task, batch_size)
 
     def propose_task(self, task_type: TaskType) -> tuple[
-        str, Float[torch.Tensor, "seq_len vocab_size"], Int[torch.Tensor, "seq_len"]]:
+        str, Float[torch.Tensor, "seq_len vocab_size"], Int[torch.Tensor, "seq_len"], Int[torch.Tensor, "seq_len"]]:
         sample = self.mega_buffer.sample_from_buffer(num_to_sample=1)[0]
         prompt = format_as_string(sample, task_type, Role.PROPOSER)
-        response, logprobs, sample_ids, prompt_tokens = generate_response(self.args, self.training_model, self.tokenizer, prompt)
+        response, logprobs, sample_ids, prompt_tokens, attention_mask = generate_response(self.args,
+                                                                                          self.training_model,
+                                                                                          self.tokenizer, prompt)
         sample.prompt_tokens = prompt_tokens
-        return response, logprobs, sample_ids
+        return response, logprobs, sample_ids, attention_mask
 
     def generate_and_validate_io_pairs(self, program: PrimeSample, num_io_pairs: int) -> tuple[
         list[IOPair], Float[torch.Tensor, "seq_len vocab_size"], Int[torch.Tensor, "seq_len"], Int[
-            torch.Tensor, "max_prompt_len"], list[Answer]]:
+            torch.Tensor, "max_prompt_len"], list[Answer], Int[torch.Tensor, "seq_len"]]:
         induction_prompt = format_as_string(program, TaskType.INDUCTION, Role.PROPOSER, num_io_pairs)
-        response, logprobs, sample_ids, prompt_tokens = generate_response(self.args, self.training_model,
-                                                                          self.tokenizer, induction_prompt)
+        response, logprobs, sample_ids, prompt_tokens, attention_mask = generate_response(self.args,
+                                                                                          self.training_model,
+                                                                                          self.tokenizer,
+                                                                                          induction_prompt)
 
         answers = validate_single_response(response, CHECK_MAP[TaskType.INDUCTION])
         valid_answers = [a for a in answers if a.is_valid]
 
         io_pairs = [IOPair(input_str=e.input, output_str=e.output) for e in valid_answers]
         program.prompt_tokens = prompt_tokens
-        return io_pairs, logprobs, sample_ids, prompt_tokens, answers
+        return io_pairs, logprobs, sample_ids, prompt_tokens, answers, attention_mask
 
     def learning_phase(self) -> None:
         """
@@ -225,11 +257,12 @@ class AZRTrainer:
         all_rewards = self.rollout_phase()
 
         # now do minibatch policy updates
-        for mini_batch in self.mega_buffer.get_minibatches(self.args):
+        for mini_batch in self.mega_buffer.get_minibatches():
+            self.step += 1
             # first do a forward pass on current policy to get the logprobs used in importance ratio
             # get the prompts that we need to use for the forawrd
             prompts = [self.tokenizer.decode(s.prompt_tokens, skip_special_tokens=True) for s in mini_batch.samples]
-            _, logprobs, sample_ids, _ = generate_response_bulk(
+            _, logprobs, sample_ids, _, attention_masks = generate_response_bulk(
                 self.args, self.training_model, self.tokenizer, prompts
             )
             logprobs = remove_dvocab_from_logprobs(logprobs, sample_ids)
@@ -240,3 +273,23 @@ class AZRTrainer:
             objective.backward()
             torch.nn.utils.clip_grad_norm_(self.training_model.parameters(), self.args.max_grad_norm)
             self.optimizer.step()
+
+            # Evaluate after gradient update
+            eval_results = run_baseline_evaluation_prime_samples(
+                self.args, self.training_model, self.tokenizer, mini_batch.samples
+            )
+            print(f"Minibatch accuracy: {eval_results['accuracy']:.2%}")
+
+            # Log metrics to wandb if enabled
+            if self.args.use_wandb:
+                # Log accuracy
+                wandb.log({"minibatch_accuracy": eval_results['accuracy']}, step=self.step)
+
+                # Log rewards by role and task type
+                reward_logs = {}
+                for role_idx, role in enumerate(['proposer', 'solver']):
+                    for task_idx, task in enumerate(['abduction', 'deduction', 'induction']):
+                        mean_reward = all_rewards[role_idx, task_idx].mean().item()
+                        reward_logs[f"reward/{role}_{task}"] = mean_reward
+
+                wandb.log(reward_logs, step=self.step)
