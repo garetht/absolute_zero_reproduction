@@ -1,8 +1,11 @@
+import random
 import re
 from typing import Optional
 from dataclasses import dataclass
+from constants import MAXIMUM_PRIME
 from custom_types import BaseSample, TaskType, Answer, PrimeSample, Problem, Role
 from model.eval.prime_inversion import solve_modular_inverse
+
 END_OF_USER_MESSAGE = """
 <|im_end|>
 <|im_start|>assistant
@@ -15,7 +18,8 @@ Provide your answer as a single boxed number within e.g. \[
 """
 
 BOXED_NUMBER_X = """
-Provide your answer as a single boxed number within e.g. \[
+Provide your answer as a single boxed number e.g. 
+\[
 \\boxed{{x}}
 \]
 """
@@ -31,17 +35,31 @@ Provide your answer as a single boxed number within e.g. \[
 \\boxed{{p}}
 \]
 """
-# TODO wrap this in a box?
-BOXED_XY_PAIRS = """
-Provide your answer as {num_io_pairs} equation(s) in the format:
-equation_1
-equation_2
-...
 
-Each equation should follow the pattern: x * y ≡ 1 (mod p)
+BOXED_XY_PAIRS = """
+Provide your answer as {num_io_pairs} equation(s) each in a separate boxed equation e.g. \[
+\\boxed{{equation_1}}
+\], \[
+\\boxed{{equation_2}}
+\],
+...
+"""
+
+BOXED_EQUATION = """
+Provide your answer as a single boxed equation in the format with the variables in the square brackets filled in e.g. \[
+\\boxed{{x * y ≡ 1 (mod p)}}
+\]
 """
 
 ABDUCTION_SOLVER_PROMPT = """<|im_start|>user
+## Task:
+Given a prime number p and an integer y, find x such that:
+
+x * {y} ≡ 1 (mod {prime})
+
+### Formatting:{boxed_number}{end_message}"""
+
+OLD_ABDUCTION_SOLVER_PROMPT = """<|im_start|>user
 Given a prime number p and an integer y, find x such that:
 
 x * {y} ≡ 1 (mod {prime})
@@ -49,51 +67,73 @@ x * {y} ≡ 1 (mod {prime})
 {boxed_number}{end_message}"""
 
 DEDUCTION_SOLVER_PROMPT = """<|im_start|>user
+## Task:
 Given a prime number p and an integer x, find y such that:
 
 {x} * y ≡ 1 (mod {prime})
 
-{boxed_number}{end_message}"""
+### Formatting:{boxed_number}{end_message}"""
 
 INDUCTION_SOLVER_PROMPT = """<|im_start|>user
-Given integers x and y, find a p such that:
+## Task:
+Given integers x and y, find a prime number p <= {maximum_prime} such that:
 
 {x} * {y} ≡ 1 (mod p)
 
-{boxed_number}{end_message}"""
+### Formatting:{boxed_number}{end_message}"""
 
 ABDUCTION_PROPOSER_PROMPT = """<|im_start|>user
-Task: Create a prime inversion equation with one missing input, x. There should be a single solution for x.
-Using the reference example provided below, create your own unique equation.
+## Task:
+Create a prime inversion equation x * y ≡ 1 (mod p) filling in y and p with positive integers and keeping x as is. 
+
+Using the reference example provided below, create your own unique equation with a different value of y and p to improve your ability to invert numbers modulo a prime.
 
 Reference Example:
 x * {y} ≡ 1 (mod {prime})
 
-Create a new equation following this pattern:
-x * [your_y] ≡ 1 (mod [your_prime])
+### Evaluation Criteria:
+- p must be a positive prime integer satisfying 5 <= p <= {maximum_prime}.
+- p should be large enough such that you cannot find the inverse of r for all 1 <= r < p.
+- p should be small enough such that you can find the inverse of some r in 1 <= r < p.
+- y should satisfy 1 <= y < p.
 
-{boxed_number}{end_message}"""
+### Formatting:{boxed_equation}{end_message}"""
 
 DEDUCTION_PROPOSER_PROMPT = """<|im_start|>user
-Task: Create a prime inversion equation with one missing input, y. There should be a single solution for y.
-Using the reference example provided below, create your own unique equation.
+## Task:
+Create a prime inversion equation x * y ≡ 1 (mod p) filling in x and p with positive integers and keeping y as is. 
+
+Using the reference example provided below, create your own unique equation with a different value of x and p to improve your ability to invert numbers modulo a prime.
 
 Reference Example:
 {x} * y ≡ 1 (mod {prime})
 
-Create a new equation following this pattern:
-[your_x] * y ≡ 1 (mod [your_prime])
+### Evaluation Criteria:
+- p must be a positive prime integer satisfying 5 <= p <= {maximum_prime}.
+- p should be large enough such that you cannot find the inverse of r for all 1 <= r < p.
+- p should be small enough such that you can find the inverse of some r in 1 <= r < p.
+- x should satisfy 1 <= x < p.
 
-{boxed_number}{end_message}"""
+### Formatting:{boxed_equation}{end_message}"""
 
 INDUCTION_PROPOSER_PROMPT = """<|im_start|>user
-Task: Create {num_io_pairs} prime inversion equation(s) with one missing prime, p. There should be at least one valid solution for p that works for all equations.
-Using the reference example provided below, create your own unique equation(s).
+## Task: 
+Create {num_io_pairs} prime inversion equation(s) x * y ≡ 1 (mod p) filling in x and y while keeping the prime p as is.
+
+Using the reference example provided below, create your own unique equations with different values of x and y --- **but the same p** --- to improve your ability to invert numbers modulo a prime.
 
 Reference Example:
-{x} * {y} ≡ 1 (mod p)
+{induction_examples}
 
-{boxed_number}{end_message}"""
+### Evaluation Criteria:
+- You should have a positive prime integer p in mind when generating **all** the pairs.
+- p should satisfying {num_io_pairs} < p <= {maximum_prime}.
+- Make sure that the pair(s) of x and y are unique.
+- Make sure that there are {num_io_pairs} pair(s) of x and y.
+- **Do not include the prime p in your equations. Keep it as is.**
+- If the letter p **DOES NOT** appear in your equation, you will be penalized.
+
+### Formatting:{boxed_pairs}{end_message}"""
 
 
 @dataclass
@@ -109,7 +149,7 @@ def extract_modular_equations(text) -> list[ModularEquation]:
     Returns a list of ModularEquation objects for all matches found
     """
     # Simplified regex pattern
-    pattern = r'(\w+) \* (\w+) ≡ 1 \(mod (\w+)\)'
+    pattern = r"(\w+) \* (\w+) ≡ 1 \(mod (\w+)\)"
 
     re_matches = re.findall(pattern, text)
 
@@ -124,7 +164,7 @@ def extract_modular_equations(text) -> list[ModularEquation]:
         result = ModularEquation(
             x=try_parse_int(match[0]),
             y=try_parse_int(match[1]),
-            p=try_parse_int(match[2])
+            p=try_parse_int(match[2]),
         )
         results.append(result)
 
@@ -149,32 +189,32 @@ def extract_boxed_number(text: str) -> Optional[int]:
         return None
 
 
-def format_as_string(sample: PrimeSample, task_type: TaskType, role: Role, num_io_pairs: Optional[int] = 0) -> str:
+def format_as_string(
+    sample: PrimeSample,
+    task_type: TaskType,
+    role: Role,
+    num_io_pairs: Optional[int] = 0,
+) -> str:
     match role:
         case Role.PROPOSER:
-            return create_proposer_prompt(Problem.from_prime_sample(sample, task_type), num_io_pairs=num_io_pairs)
+            return create_proposer_prompt(
+                Problem.from_prime_sample(sample, task_type), num_io_pairs=num_io_pairs
+            )
         case Role.SOLVER:
             return create_solver_prompt(Problem.from_prime_sample(sample, task_type))
 
     raise ValueError(f"unexpected role {role}")
 
-def validate_proposer_formatting_and_correctness(response: str, task_type: TaskType) -> Answer:
+
+def validate_proposer_formatting_and_correctness(
+    response: str, task_type: TaskType
+) -> Answer:
     return validate_proposer_formatting_and_correctness_bulk([response], task_type)[0]
 
 
-INVALID_FORMATTING = Answer(
-    input=None,
-    program=None,
-    output=None,
-    reward=-1.0
-)
+INVALID_FORMATTING = Answer(input=None, program=None, output=None, reward=-1.0)
 
-INCORRECT_ANSWER = Answer(
-    input=None,
-    program=None,
-    output=None,
-    reward=-0.5
-)
+INCORRECT_ANSWER = Answer(input=None, program=None, output=None, reward=-0.5)
 
 
 def check_types(parsed: object, expect_types: dict[str, bool]) -> bool:
@@ -193,23 +233,29 @@ CHECK_MAP = {
     TaskType.ABDUCTION: {
         "expect_types": {"x": False, "y": True, "p": True},
         "logic": lambda parsed: len(solve_modular_inverse(y=parsed.y, p=parsed.p)) == 1,
-        "make_answer": lambda parsed: Answer(input=None, program=parsed.p, output=parsed.y, reward=0.0)
+        "make_answer": lambda parsed: Answer(
+            input=None, program=parsed.p, output=parsed.y, reward=0.0
+        ),
     },
     TaskType.DEDUCTION: {
         "expect_types": {"y": False, "x": True, "p": True},
         "logic": lambda parsed: len(solve_modular_inverse(x=parsed.x, p=parsed.p)) == 1,
-        "make_answer": lambda parsed: Answer(input=parsed.x, program=parsed.p, output=None, reward=0.0)
+        "make_answer": lambda parsed: Answer(
+            input=parsed.x, program=parsed.p, output=None, reward=0.0
+        ),
     },
     TaskType.INDUCTION: {
         "expect_types": {"p": False, "x": True, "y": True},
         "logic": lambda parsed: len(solve_modular_inverse(x=parsed.x, y=parsed.y)) > 0,
-        "make_answer": lambda parsed: Answer(input=parsed.x, program=None, output=parsed.y, reward=0.0)
-    }
+        "make_answer": lambda parsed: Answer(
+            input=parsed.x, program=None, output=parsed.y, reward=0.0
+        ),
+    },
 }
 
+
 def validate_proposer_formatting_and_correctness_bulk(
-        responses: list[str],
-        task_type: TaskType
+    responses: list[str], task_type: TaskType
 ) -> list[Answer]:
     """
     Validate multiple responses for a given task type.
@@ -222,7 +268,6 @@ def validate_proposer_formatting_and_correctness_bulk(
         List of Answer objects corresponding to each response
     """
     # Define validation functions per task for generalization:
-
 
     config = CHECK_MAP[task_type]
 
@@ -272,17 +317,19 @@ def validate_single_response(response: str, config: dict) -> list[Answer]:
 
     for response in parsed_responses:
         # 1. Check types
-        if not check_types(response, config['expect_types']):
+        if not check_types(response, config["expect_types"]):
             answers.append(INVALID_FORMATTING)
             continue
 
         # 2. Logic/solution check
-        if not config['logic'](response):
+        if not config["logic"](response):
             answers.append(INVALID_FORMATTING)
             continue
 
-        answer = config['make_answer'](response)
-        solutions = solve_modular_inverse(p=answer.program, x=answer.input, y=answer.output)
+        answer = config["make_answer"](response)
+        solutions = solve_modular_inverse(
+            p=answer.program, x=answer.input, y=answer.output
+        )
 
         if len(solutions) == 0:
             answers.append(INCORRECT_ANSWER)
@@ -297,7 +344,9 @@ def create_sample_from_answer(answer: Answer, task_type: TaskType) -> BaseSample
     pass
 
 
-def validate_solver_formatting_and_correctness(response: str, task_type: TaskType, sample: PrimeSample) -> Answer:
+def validate_solver_formatting_and_correctness(
+    response: str, task_type: TaskType, sample: PrimeSample
+) -> Answer:
     parsed_number = extract_boxed_number(response)
     if parsed_number is None:
         return INVALID_FORMATTING
@@ -316,30 +365,57 @@ def validate_solver_formatting_and_correctness(response: str, task_type: TaskTyp
             input=sample.function_io[0].input_str,
             output=sample.function_io[0].output_str,
             program=sample.prime,
-            reward=1.0
+            reward=1.0,
         )
     else:
         return INCORRECT_ANSWER
 
 
 def create_proposer_prompt(problem: Problem, num_io_pairs: Optional[int] = None) -> str:
+    def generate_induction_examples(num_pairs: int) -> str:
+        """
+        Generate a string of example equations for the induction task.
+        """
+        r = random.Random(42)  # Sorry, but hardcoding a seed here for simplicity
+        p = 101  # Sorry, but hardcoding a prime here for simplicity
+        examples = []
+        for _ in range(num_pairs):
+            x = r.randint(1, p - 1)
+            y = pow(x, -1, p)  # Modular inverse of x mod p
+            examples.append(f"{x} * {y} ≡ 1 (mod p)")
+        return "\n".join(examples)
+
     match problem.task_type:
         case TaskType.ABDUCTION:
-            prompt = ABDUCTION_PROPOSER_PROMPT.format(y=problem.y, prime=problem.prime, 
-                                                    boxed_number=BOXED_NUMBER_X,
-                                                    end_message=END_OF_USER_MESSAGE)
+            prompt = ABDUCTION_PROPOSER_PROMPT.format(
+                y=problem.y,
+                prime=problem.prime,
+                maximum_prime=MAXIMUM_PRIME,
+                boxed_equation=BOXED_EQUATION,
+                end_message=END_OF_USER_MESSAGE,
+            )
         case TaskType.DEDUCTION:
-            prompt = DEDUCTION_PROPOSER_PROMPT.format(x=problem.x, prime=problem.prime, 
-                                                    boxed_number=BOXED_NUMBER_Y,
-                                                    end_message=END_OF_USER_MESSAGE)
+            prompt = DEDUCTION_PROPOSER_PROMPT.format(
+                x=problem.x,
+                prime=problem.prime,
+                maximum_prime=MAXIMUM_PRIME,
+                boxed_equation=BOXED_EQUATION,
+                end_message=END_OF_USER_MESSAGE,
+            )
         case TaskType.INDUCTION:
             # Default to 1 if num_io_pairs is not specified
             pairs_count = num_io_pairs if num_io_pairs is not None else 1
             boxed_pairs = BOXED_XY_PAIRS.format(num_io_pairs=pairs_count)
-            prompt = INDUCTION_PROPOSER_PROMPT.format(x=problem.x, y=problem.y, 
-                                                    num_io_pairs=pairs_count,
-                                                    boxed_number=boxed_pairs,
-                                                    end_message=END_OF_USER_MESSAGE)
+
+            prompt = INDUCTION_PROPOSER_PROMPT.format(
+                x=problem.x,
+                y=problem.y,
+                maximum_prime=MAXIMUM_PRIME,
+                num_io_pairs=pairs_count,
+                induction_examples=generate_induction_examples(pairs_count),
+                boxed_pairs=boxed_pairs,
+                end_message=END_OF_USER_MESSAGE,
+            )
         case _:
             raise ValueError(f"invalid blank value {problem.blank}")
 
@@ -361,18 +437,46 @@ def create_solver_prompt(problem: Problem) -> str:
     """
     match problem.blank:
         case "x":
-            prompt = ABDUCTION_SOLVER_PROMPT.format(y=problem.y, prime=problem.prime, 
-                                                  boxed_number=BOXED_NUMBER_X,
-                                                  end_message=END_OF_USER_MESSAGE)
+            prompt = ABDUCTION_SOLVER_PROMPT.format(
+                y=problem.y,
+                prime=problem.prime,
+                boxed_number=BOXED_NUMBER_X,
+                end_message=END_OF_USER_MESSAGE,
+            )
         case "y":
-            prompt = DEDUCTION_SOLVER_PROMPT.format(x=problem.x, prime=problem.prime, 
-                                                  boxed_number=BOXED_NUMBER_Y,
-                                                  end_message=END_OF_USER_MESSAGE)
+            prompt = DEDUCTION_SOLVER_PROMPT.format(
+                x=problem.x,
+                prime=problem.prime,
+                boxed_number=BOXED_NUMBER_Y,
+                end_message=END_OF_USER_MESSAGE,
+            )
         case "p":
-            prompt = INDUCTION_SOLVER_PROMPT.format(x=problem.x, y=problem.y, 
-                                                  boxed_number=BOXED_NUMBER_P,
-                                                  end_message=END_OF_USER_MESSAGE)
+            prompt = INDUCTION_SOLVER_PROMPT.format(
+                x=problem.x,
+                y=problem.y,
+                maximum_prime=MAXIMUM_PRIME,
+                boxed_number=BOXED_NUMBER_P,
+                end_message=END_OF_USER_MESSAGE,
+            )
         case _:
             raise ValueError(f"invalid blank value {problem.blank}")
 
     return prompt
+
+
+from model.eval.prime_inversion import generate_problems
+
+if __name__ == "__main__":
+    task_type = TaskType.INDUCTION
+    print("-------------------------")
+    print(f"[TASK TYPE] {task_type}")
+    print("-------------------------")
+    problems = generate_problems(1, [5, 7, 11], seed=0)
+    for problem in problems:
+        problem.task_type = task_type
+        solver_prompt = create_solver_prompt(problem)
+        proposer_prompt = create_proposer_prompt(problem, num_io_pairs=5)
+        print(f"[S] {solver_prompt}")
+        print("-------------------------")
+        print(f"[P] {proposer_prompt}")
+        print("-------------------------")
