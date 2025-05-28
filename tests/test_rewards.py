@@ -4,8 +4,9 @@ from unittest.mock import Mock, patch
 from custom_types import Role, TaskType, Answer
 from model.args import AZRArgs
 from model.compute.reward import compute_r_propose, compute_r_total
+from constants import DEVICE
 
-ARGS = AZRArgs()
+ARGS = AZRArgs(d_vocab=50257)
 
 class TestComputeRPropose:
     def test_compute_r_propose_basic(self):
@@ -107,7 +108,7 @@ class TestComputeRTotal:
         # Create mock samples for each response
         mock_samples = [Mock() for _ in range(2)]
         solver_responses = ["response1", "response2"]
-        r_proposer_format = torch.tensor([-1.0, -2.0])
+        r_proposer_format = torch.tensor([-1.0, -2.0], dtype=ARGS.dtype, device=DEVICE)
         
         result = compute_r_total(
             ARGS,
@@ -131,7 +132,7 @@ class TestComputeRTotal:
         # Create mock samples for each response
         mock_samples = [Mock() for _ in range(3)]
         solver_responses = ["resp1", "resp2", "resp3"]
-        r_proposer_format = torch.tensor([0.0, 0.0, 0.0])  # Not used for solver
+        r_proposer_format = torch.tensor([0.0, 0.0, 0.0], dtype=ARGS.dtype, device=DEVICE)  # Not used for solver
         
         result = compute_r_total(
             ARGS,
@@ -143,7 +144,7 @@ class TestComputeRTotal:
         )
         
         # Should return r_solve values directly
-        expected = torch.tensor([0.8, 0.6, 1.0])
+        expected = torch.tensor([0.8, 0.6, 1.0], dtype=ARGS.dtype, device=DEVICE)
         assert torch.allclose(result, expected)
     
     @patch('model.compute.reward.validate_solver_formatting_and_correctness')
@@ -153,12 +154,12 @@ class TestComputeRTotal:
         # Setup mocks
         mock_answer = Mock(reward=0.5)
         mock_validate.return_value = mock_answer
-        mock_r_propose.return_value = torch.tensor([0.4])
+        mock_r_propose.return_value = torch.tensor([0.4], dtype=ARGS.dtype, device=DEVICE)
         
         # Create mock samples for each response
         mock_samples = [Mock() for _ in range(4)]
         solver_responses = ["resp1", "resp2", "resp3", "resp4"]
-        r_proposer_format = torch.tensor([0.5, -1.0, 0.0, -2.0])
+        r_proposer_format = torch.tensor([0.5, -1.0, 0.0, -2.0], dtype=ARGS.dtype, device=DEVICE)
         
         result = compute_r_total(
             ARGS,
@@ -171,7 +172,7 @@ class TestComputeRTotal:
         
         # Expected: [0.4, -1.0, 0.4, -2.0]
         # (r_propose for non-negative, original for negative)
-        expected = torch.tensor([0.4, -1.0, 0.4, -2.0])
+        expected = torch.tensor([0.4, -1.0, 0.4, -2.0], dtype=ARGS.dtype, device=DEVICE)
         assert torch.allclose(result, expected)
     
     @pytest.mark.parametrize("task_type", list(TaskType))
@@ -184,7 +185,7 @@ class TestComputeRTotal:
         # Create mock sample
         mock_samples = [Mock()]
         solver_responses = ["response"]
-        r_proposer_format = torch.tensor([0.5])
+        r_proposer_format = torch.tensor([0.5], dtype=ARGS.dtype, device=DEVICE)
         
         result = compute_r_total(
             ARGS,
@@ -197,4 +198,4 @@ class TestComputeRTotal:
         
         # Verify validate was called with correct task_type and sample
         mock_validate.assert_called_with("response", task_type, mock_samples[0])
-        assert torch.allclose(result, torch.tensor([0.75]))
+        assert torch.allclose(result, torch.tensor([0.75], dtype=ARGS.dtype, device=DEVICE))

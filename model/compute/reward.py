@@ -4,7 +4,7 @@ from jaxtyping import Float
 import torch
 
 from constants import DEVICE
-from custom_types import Role, TaskType, PrimeSample
+from custom_types import Role, TaskType, Problem
 from model.args import AZRArgs
 from utils.string_formatting import validate_solver_formatting_and_correctness
 
@@ -23,7 +23,7 @@ def compute_r_propose(r_solve: Float[Tensor, "batch_size"]) -> Float[Tensor, ""]
     return r_propose
 
 
-def compute_r_total(args: AZRArgs, samples: list[PrimeSample], solver_responses: list[str], role: Role, task_type: TaskType, r_proposer_format: Float[Tensor, "batch_size"]) -> Float[Tensor, "batch_size"]:
+def compute_r_total(args: AZRArgs, samples: list[Problem], solver_responses: list[str], role: Role, task_type: TaskType, r_proposer_format: Float[Tensor, "batch_size"]) -> Float[Tensor, "batch_size"]:
     """
     Computes the total reward for the model's responses. First it computes the formatting and correctness reward of the solver's response, then it computes the r_total reward based on r_solve and r_propose. If the role is proposer, it returns the r_propose reward if r_proposer_format is greater than or equal to 0, otherwise it returns the value in r_proposer_format. If the role is solver, it returns the r_solve reward. 
     """

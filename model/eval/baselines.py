@@ -3,7 +3,7 @@ import random
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from custom_types import PrimeSample, Problem, EvaluationResults, TaskType
+from custom_types import Problem, EvaluationResults, TaskType
 from model.args import AZRArgs
 from model.eval.evaluator import evaluate_model_from_name, evaluate_model
 from model.eval.prime_inversion import generate_problems, PRIMES
@@ -11,28 +11,26 @@ from model.eval.prime_inversion import generate_problems, PRIMES
 
 def run_baseline_evaluation_prime_samples(args: AZRArgs, model: AutoModelForCausalLM,
                                           tokenizer: AutoTokenizer,
-                                          prime_samples: list[PrimeSample],
+                                          problems: list[Problem],
                                           max_new_tokens: int = 100,
                                           batch_size: int = 1,
                                           seed: int = 42) -> EvaluationResults:
     """
-    This function takes prime samples and then performs baseline evaluation using the specified model
-     and parameters. The conversion process involves selecting either 'x' or 'y' as the variable
-     name for each prime sample using the provided random seed for reproducibility.
+    This function takes problems and then performs baseline evaluation using the specified model
+     and parameters.
 
     :param args:
     :param model: Model being evaluated
     :param tokenizer: Tokenizer for the model being evaluated
-    :param prime_samples: Collection of prime samples to be evaluated
+    :param problems: Collection of problems to be evaluated
     :param max_new_tokens: Maximum number of new tokens to generate during evaluation
     :param batch_size: Number of problems to process in each batch
-    :param seed: Random seed for reproducible variable name selection
+    :param seed: Random seed for reproducibility
     :return: Dictionary containing evaluation results and metrics
     """
-    r = random.Random(seed)
     return evaluate_model(
         args,
-        model, tokenizer, [Problem.from_prime_sample(ps, r.choice(list(TaskType))) for ps in prime_samples], max_new_tokens,
+        model, tokenizer, problems, max_new_tokens,
         batch_size
     )
 
