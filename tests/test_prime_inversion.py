@@ -6,19 +6,24 @@ from model.eval.prime_inversion import solve_modular_inverse, generate_problems,
     "prob",
     generate_problems(100, PRIMES),
     ids=lambda p: (
-            f"solve_x_p{p.prime}_y{p.y}" if p.blank == 'x' else f"solve_y_p{p.prime}_x{p.x}"
+            f"solve_x_p{p.prime}_y{p.y}" if p.blank == 'x' else f"solve_y_p{p.prime}_x{p.x}" if p.blank == 'y' else f"solve_y{p.y}_p_x{p.x}"
     )
 )
 def test_modular_inverse_problem(prob):
     if prob.blank == 'x':
-        computed_x = solve_modular_inverse(prob.prime, x=None, y=prob.y)
-        assert computed_x == prob.x, (
+        computed_x = solve_modular_inverse(p=prob.prime, x=None, y=prob.y)
+        assert computed_x.pop() == prob.x, (
             f"Wanted x={prob.x}, got {computed_x} (p={prob.prime}, y={prob.y})"
         )
-    else:
-        computed_y = solve_modular_inverse(prob.prime, x=prob.x, y=None)
-        assert computed_y == prob.y, (
+    elif prob.blank == 'y':
+        computed_y = solve_modular_inverse(p=prob.prime, x=prob.x, y=None)
+        assert computed_y.pop() == prob.y, (
             f"Wanted y={prob.y}, got {computed_y} (p={prob.prime}, x={prob.x})"
+        )
+    else:
+        computed_primes = solve_modular_inverse(p=None, x=prob.x, y=prob.y)
+        assert prob.prime in computed_primes, (
+            f"Wanted p={prob.prime}, got {computed_primes} (x={prob.x}, y={prob.y})"
         )
 
 
