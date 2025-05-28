@@ -32,11 +32,17 @@ class MegaBuffer:
         args: AZRArgs,
         logprobs: Int[Tensor, "role task batch_size max_response_len vocab_size"],
         sample_ids: Int[Tensor, "role task batch_size max_response_len"],
+        attention_masks: Int[Tensor, "role task batch_size max_response_len"] = None,
     ):
         self.args = args
         self.seed_buffer: list[BaseSample] = []
         self.logprobs = logprobs
         self.sample_ids = sample_ids
+        # Initialize attention masks if not provided
+        if attention_masks is None:
+            self.attention_masks = torch.ones_like(sample_ids)
+        else:
+            self.attention_masks = attention_masks
         # batch_size is the index of the sample in the buffer, same for any role task combo
         self.buffer: list[BaseSample] = []
 
@@ -66,11 +72,13 @@ class MegaBuffer:
             ), (
                 "Logprobs should have shape  (len(Role), len(TaskType), args.minibatch_size, args.max_response_length, args.vocab_size)"
             )
+            minibatch_attention_masks = self.attention_masks[:, :, indices]
             out.append(
                 MiniBatch(
                     samples=minibatch_samples,
                     sample_ids=minibatch_sample_ids,
                     logprobs=minibatch_logprobs,
+                    attention_masks=minibatch_attention_masks,
                 )
             )
         return out
@@ -80,6 +88,7 @@ class MegaBuffer:
         self.buffer = []
         self.logprobs = torch.zeros_like(self.logprobs, device=self.logprobs.device)
         self.sample_ids = torch.zeros_like(self.sample_ids, device=self.sample_ids.device)
+        self.attention_masks = torch.zeros_like(self.attention_masks, device=self.attention_masks.device)
 
     @property
     def combined_buffer(self):

@@ -5,6 +5,7 @@ import torch
 import wandb
 
 from constants import MODEL_NAME, DEVICE
+from custom_types import Role, TaskType
 
 from buffer.base_buff import MegaBuffer
 
@@ -37,8 +38,8 @@ if __name__ == "__main__":
         args=args,
         logprobs=torch.empty(
             (
-                len(args.roles),
-                len(args.task_types),
+                len(Role),
+                len(TaskType),
                 args.batch_size,
                 args.max_response_length,
                 args.d_vocab,
@@ -48,8 +49,18 @@ if __name__ == "__main__":
         ),
         sample_ids=torch.empty(
             (
-                len(args.roles),
-                len(args.task_types),
+                len(Role),
+                len(TaskType),
+                args.batch_size,
+                args.max_response_length,
+            ),
+            dtype=torch.int,
+            device=DEVICE,
+        ),
+        attention_masks=torch.ones(
+            (
+                len(Role),
+                len(TaskType),
                 args.batch_size,
                 args.max_response_length,
             ),

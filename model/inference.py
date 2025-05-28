@@ -18,11 +18,12 @@ def generate_response(
     Float[torch.Tensor, "max_response_len vocab_size"],
     Int[torch.Tensor, "max_response_len"],
     Int[torch.Tensor, "prompt_len"],
+    Int[torch.Tensor, "max_response_len"],
 ]:
-    responses, logprobs, gen_ids, prompt_ids = generate_response_bulk(
+    responses, logprobs, gen_ids, prompt_ids, attention_masks = generate_response_bulk(
         args, model, tokenizer, [prompt]
     )
-    return responses[0], logprobs[0], gen_ids[0], prompt_ids[0]
+    return responses[0], logprobs[0], gen_ids[0], prompt_ids[0], attention_masks[0]
 
 
 # for each prompt in the list, returns a tuple of lists: (list of str responses, list of logprobs tensors)
@@ -37,6 +38,7 @@ def generate_response_bulk(
     Float[torch.Tensor, "batch_size max_response_len vocab_size"],
     Int[torch.Tensor, "batch_size max_response_len"],
     Int[torch.Tensor, "batch_size prompt_len"],
+    Int[torch.Tensor, "batch_size max_response_len"],
 ]:
     # Tokenize inputs with padding
     inputs = tokenizer(
@@ -63,12 +65,27 @@ def generate_response_bulk(
 
     # Decode responses
     responses = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+    
+    # Create attention masks to identify valid (non-padded) positions
+    # Find positions where we have actual generated tokens (not padding)
+    attention_masks = (generated_ids != tokenizer.pad_token_id).int()
+    
+    # If we have EOS tokens, mask everything after the first EOS in each sequence
+    if tokenizer.eos_token_id is not None:
+        # Find first EOS position in each sequence
+        eos_positions = (generated_ids == tokenizer.eos_token_id).int()
+        # Create cumulative sum to mask everything after first EOS
+        eos_cumsum = torch.cumsum(eos_positions, dim=1)
+        # Mask positions after first EOS (but keep the EOS token itself)
+        post_eos_mask = (eos_cumsum <= 1).int()
+        attention_masks = attention_masks * post_eos_mask
+    
     # TODO confirm that we aren't off by 1 indexing into the logits here
     # logits are these shape: (max_response_length, batch_size, vocab_size_size) before transpose, so transpose to (batch_size, max_response_length, vocab_size_size)
     logits = torch.stack(outputs.scores, dim=0).transpose(0, 1)
     logprobs = torch.log_softmax(logits, dim=-1)
     # logprobs shape: (batch_size, max_response_length vocab_size_size)
-    return responses, logprobs, generated_ids, inputs.input_ids
+    return responses, logprobs, generated_ids, inputs.input_ids, attention_masks
 
 
 def remove_dvocab_from_logprobs(
