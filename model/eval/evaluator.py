@@ -9,7 +9,6 @@ from typing import List, Optional
 from custom_types import ProblemResult, Problem, EvaluationResults
 from model.args import AZRArgs
 from model.eval.prime_inversion import is_prime
-from model.eval.prompts import create_prompt
 from model.inference import generate_response_bulk
 from utils.string_formatting import extract_boxed_number, create_solver_prompt
 
@@ -137,7 +136,6 @@ class Evaluator:
         print(f"   • Overall accuracy: {results['accuracy']:.2%}")
         print(f"   • Total evaluation time: {total_eval_time:.1f}s")
         print(f"   • Average time per problem: {total_eval_time / num_problems:.2f}s")
-
 
     def evaluate(
             self, problems: List[Problem], eval_start_time: float = None
