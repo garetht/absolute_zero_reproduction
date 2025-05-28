@@ -85,7 +85,7 @@ class AZRTrainer:
         non_clipped = advantages * importance_ratio  # shape: (role, task, minibatch_size, seq_len, )
         # compute the clipped objective
         clipped = advantages.clamp(-self.args.clip_ratio, self.args.clip_ratio) * importance_ratio # shape: (role, task, minibatch_size, seq_len, 
-        return torch.min(non_clipped, clipped).mean()  # shape: ()
+        return torch.minimum(non_clipped, clipped).mean()  # shape: ()
 
     def rollout_phase(self) -> Float[torch.Tensor, "role task batch_size"]:
         """
