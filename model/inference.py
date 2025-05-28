@@ -67,36 +67,63 @@ def generate_response_bulk(
             output_scores=True,
         )
 
-    # Extract generated tokens (excluding input tokens), shape (batch_size, max_response_length)
+    # Extract generated tokens (excluding input tokens), shape (batch_size, actual_length)
     generated_ids = outputs.sequences[:, inputs.input_ids.shape[1] :]
+    actual_length = generated_ids.shape[1]
 
     # Decode responses
     responses = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-
+    
+    # Pad generated_ids to max_response_length
+    if actual_length < args.max_response_length:
+        padding_length = args.max_response_length - actual_length
+        padding = torch.full(
+            (generated_ids.shape[0], padding_length), 
+            tokenizer.pad_token_id, 
+            dtype=generated_ids.dtype, 
+            device=generated_ids.device
+        )
+        generated_ids = torch.cat([generated_ids, padding], dim=1)
+    elif actual_length > args.max_response_length:
+        # Truncate if longer than expected
+        generated_ids = generated_ids[:, :args.max_response_length]
+        actual_length = args.max_response_length
+    
     # Create attention masks to identify valid (non-padded) positions
-    # Find positions where we have actual generated tokens (not padding)
-    attention_masks = (generated_ids != tokenizer.pad_token_id).int()
+    attention_masks = torch.zeros_like(generated_ids, dtype=torch.int)
+    attention_masks[:, :actual_length] = 1
     
     # If we have EOS tokens, mask everything after the first EOS in each sequence
     if tokenizer.eos_token_id is not None:
-        # Find first EOS position in each sequence
-        eos_positions = (generated_ids == tokenizer.eos_token_id).int()
-        # Create cumulative sum to mask everything after first EOS
-        eos_cumsum = torch.cumsum(eos_positions, dim=1)
-        # Mask positions after first EOS (but keep the EOS token itself)
-        post_eos_mask = (eos_cumsum <= 1).int()
-        attention_masks = attention_masks * post_eos_mask
-
+        # Find first EOS position in each sequence (only in valid region)
+        eos_positions = (generated_ids[:, :actual_length] == tokenizer.eos_token_id).int()
+        if eos_positions.sum() > 0:
+            # Create cumulative sum to mask everything after first EOS
+            eos_cumsum = torch.cumsum(eos_positions, dim=1)
+            # Mask positions after first EOS (but keep the EOS token itself)  
+            post_eos_mask = (eos_cumsum <= 1).int()
+            attention_masks[:, :actual_length] = attention_masks[:, :actual_length] * post_eos_mask
+    
+    # Process logits and pad to max_response_length
+    # logits are these shape: (actual_length, batch_size, vocab_size) before transpose
+    logits = torch.stack(outputs.scores, dim=0).transpose(0, 1)  # (batch_size, actual_length, vocab_size)
+    logprobs = torch.log_softmax(logits, dim=-1)
     print("Receiving responses from model")
     for response in responses:
         print(response)
         print('-' * 40)
-
-    # TODO confirm that we aren't off by 1 indexing into the logits here
-    # logits are these shape: (max_response_length, batch_size, vocab_size_size) before transpose, so transpose to (batch_size, max_response_length, vocab_size_size)
-    logits = torch.stack(outputs.scores, dim=0).transpose(0, 1)
-    logprobs = torch.log_softmax(logits, dim=-1)
-    # logprobs shape: (batch_size, max_response_length vocab_size_size)
+    # Pad logprobs to max_response_length if needed
+    if actual_length < args.max_response_length:
+        padding_length = args.max_response_length - actual_length
+        logprobs_padding = torch.zeros(
+            (logprobs.shape[0], padding_length, logprobs.shape[2]),
+            dtype=logprobs.dtype,
+            device=logprobs.device
+        )
+        logprobs = torch.cat([logprobs, logprobs_padding], dim=1)
+    elif actual_length > args.max_response_length:
+        logprobs = logprobs[:, :args.max_response_length, :]
+    
     return responses, logprobs, generated_ids, inputs.input_ids, attention_masks
 
 
