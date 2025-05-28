@@ -39,7 +39,8 @@ if __name__ == "__main__":
         args=args,
         mega_buffer=mega_buffer,
         tokenizer=tokenizer,
-        train_model=model,
+        training_model=model,
+        optimizer=optimizer,
         run_name=args.run_name,
     )
 
