@@ -87,7 +87,7 @@ class AZRTrainer:
         """
         # compute the importance ratio using logprobs and sample_ids
         # using the new sample_ids and the old logprobs, get the logprobs from the old policy for the new sample_ids
-        old_logprobs = minibatch.logprobs.gather(-1, new_sample_ids.unsqueeze(-1)).squeeze(
+        old_logprobs = minibatch.logprobs.gather(-1, new_sample_ids.unsqueeze(-1).to(torch.int64)).squeeze(
             -1)  # shape: (role, task, minibatch_size, seq_len)
         importance_ratio = (new_logprobs - old_logprobs).exp()  # shape: (role, task, minibatch_size, seq_len)
 
@@ -95,9 +95,10 @@ class AZRTrainer:
         attention_masks = minibatch.attention_masks.float()  # shape: (role, task, minibatch_size, seq_len)
         masked_importance_ratio = importance_ratio * attention_masks
 
-        non_clipped = advantages * masked_importance_ratio  # shape: (role, task, minibatch_size, seq_len, )
+        unsqueezed_advantages = advantages.unsqueeze(-1)
+        non_clipped = unsqueezed_advantages * masked_importance_ratio  # shape: (role, task, minibatch_size, seq_len, )
         # compute the clipped objective
-        clipped = advantages.clamp(-self.args.clip_ratio,
+        clipped = unsqueezed_advantages.clamp(-self.args.clip_ratio,
                                    self.args.clip_ratio) * masked_importance_ratio  # shape: (role, task, minibatch_size, seq_len,
 
         # Use attention masks for proper averaging - only count valid positions
@@ -256,7 +257,9 @@ class AZRTrainer:
         all_rewards = self.rollout_phase()
 
         # now do minibatch policy updates
-        for mini_batch in self.mega_buffer.get_minibatches(self.training_model, self.tokenizer):
+        for index, mini_batch in enumerate(self.mega_buffer.get_minibatches(self.training_model, self.tokenizer)):
+            minibatch_all_rewards = all_rewards[:, :, index * self.args.minibatch_size:(index + 1) * self.args.minibatch_size]
+
             self.step += 1
             # first do a forward pass on current policy to get the logprobs used in importance ratio
             # generate for both roles since loss uses both proposer and solver logprobs
@@ -284,7 +287,7 @@ class AZRTrainer:
                     new_sample_ids[role.value, problem.task_type.value, mb_idx] = sample_ids[mb_idx]
                     new_attention_masks[role.value, problem.task_type.value, mb_idx] = attention_masks[mb_idx]
             new_logprobs = remove_dvocab_from_logprobs(new_logprobs, new_sample_ids)
-            advantages = compute_advantages(self.args, all_rewards)  # shape role task minibatch_size
+            advantages = compute_advantages(self.args, minibatch_all_rewards)  # shape role task minibatch_size
             objective = self.compute_azr_objective(advantages, new_logprobs, new_sample_ids,
                                                    mini_batch)
             self.optimizer.zero_grad()

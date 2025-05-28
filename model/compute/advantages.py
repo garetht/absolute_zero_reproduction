@@ -9,7 +9,7 @@ def compute_advantages(args: AZRArgs, rewards: Float[Tensor, "role task minibatc
     # If we only have one item in the last dimension, just return the rewards directly
     if rewards.size(-1) == 1:
         return rewards
-    
+    print(f"{rewards.shape=}")
     # normalize each reward for each role and task by subtracting the mean and dividing by the standard deviation
     mean = rewards.mean(dim=-1, keepdim=True)
     std = rewards.std(dim=-1, keepdim=True)
