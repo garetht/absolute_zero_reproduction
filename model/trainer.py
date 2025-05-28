@@ -11,7 +11,7 @@ from transformers import AutoModelForCausalLM
 from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
 from jaxtyping import Float, Int
 
-from buffer.base_buff import BaseBuffer, MegaBuffer,
+from buffer.base_buff import BaseBuffer, MegaBuffer
 from model.args import AZRArgs
 from model.compute.advantages import compute_advantages
 from model.compute.reward import compute_r_total
@@ -200,8 +200,8 @@ class AZRTrainer:
             buffer (Buffer): Buffer containing rollout data to learn from.
         """
 
-        all_rewards = self.rollout_phase()
         self.mega_buffer.reset()
+        all_rewards = self.rollout_phase()
         # now do minibatch policy updates
         for mini_batch in self.mega_buffer.get_minibatches(self.args):
             # first do a forward pass on current policy to get the logprobs used in importance ratio
