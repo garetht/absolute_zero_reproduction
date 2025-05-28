@@ -56,35 +56,32 @@ class ModularEquation:
     p: int | str
 
 
-def extract_modular_equation(text) -> Optional[ModularEquation]:
+def extract_modular_equations(text) -> list[ModularEquation]:
     """
     Extract x, y, and p from modular equation: x * y ≡ 1 (mod p)
-    Returns a dictionary with the extracted values
+    Returns a list of ModularEquation objects for all matches found
     """
     # Simplified regex pattern
     pattern = r'(\w+) \* (\w+) ≡ 1 \(mod (\w+)\)'
 
-    re_match = re.search(pattern, text)
+    re_matches = re.findall(pattern, text)
 
-    if re_match is not None:
-        def try_parse_int(value_str):
-            try:
-                return int(value_str)
-            except ValueError:
-                return value_str
+    def try_parse_int(value_str: str) -> int | str:
+        try:
+            return int(value_str)
+        except ValueError:
+            return value_str
 
+    results = []
+    for match in re_matches:
         result = ModularEquation(
-            x=try_parse_int(re_match.group(1)),
-            y=try_parse_int(re_match.group(2)),
-            p=try_parse_int(re_match.group(3))
+            x=try_parse_int(match[0]),
+            y=try_parse_int(match[1]),
+            p=try_parse_int(match[2])
         )
-        return result
-    else:
-        return ModularEquation(
-            x='',
-            y='',
-            p=''
-        )
+        results.append(result)
+
+    return results
 
 
 def extract_boxed_number(text: str) -> Optional[int]:
@@ -172,7 +169,7 @@ def validate_proposer_formatting_and_correctness_bulk(
     config = check_map[task_type]
 
     for response in responses:
-        parsed_response = extract_modular_equation(response)
+        parsed_response = extract_modular_equations(response)
         # 1. Check types
         if not check_types(parsed_response, config['expect_types']):
             answers.append(INVALID_FORMATTING)

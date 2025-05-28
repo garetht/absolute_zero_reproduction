@@ -25,13 +25,6 @@ class BaseBuffer:
     def sample_ids(self):
         return torch.cat([s.sample_ids for s in self.samples])
 
-    def sample(self) -> BaseSample:
-        pass
-
-    def extend(self, sample: BaseSample):
-        pass
-
-
 class MegaBuffer:
     def __init__(
         self,

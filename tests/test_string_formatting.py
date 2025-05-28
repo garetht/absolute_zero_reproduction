@@ -1,20 +1,20 @@
 import pytest
 from custom_types import TaskType, Answer
-from utils.string_formatting import extract_modular_equation, ModularEquation, validate_proposer_formatting_and_correctness_bulk
+from utils.string_formatting import extract_modular_equations, ModularEquation, validate_proposer_formatting_and_correctness_bulk
 
 
 class TestExtractModularEquation:
     def test_extract_modular_equation_valid_input(self):
         text = "x * y ≡ 1 (mod p)"
-        result = extract_modular_equation(text)
-        assert result is not None
-        assert result.x == "x"
-        assert result.y == "y"
-        assert result.p == "p"
+        result = extract_modular_equations(text)
+        assert len(result) == 1
+        assert result[0].x == "x"
+        assert result[0].y == "y"
+        assert result[0].p == "p"
 
     def test_extract_modular_equation_with_numbers(self):
         text = "5 * 3 ≡ 1 (mod 7)"
-        result = extract_modular_equation(text)
+        result = extract_modular_equations(text)[0]
         assert result is not None
         assert result.x == 5
         assert result.y == 3
@@ -22,51 +22,35 @@ class TestExtractModularEquation:
 
     def test_extract_modular_equation_mixed_variables_and_numbers(self):
         text = "a * 4 ≡ 1 (mod 17)"
-        result = extract_modular_equation(text)
-        assert result is not None
-        assert result.x == "a"
-        assert result.y == 4
-        assert result.p == 17
+        result = extract_modular_equations(text)
+        assert len(result) == 1
+        assert result[0].x == "a"
+        assert result[0].y == 4
+        assert result[0].p == 17
 
     def test_extract_modular_equation_invalid_format(self):
         text = "x + y = 1 mod p"
-        result = extract_modular_equation(text)
-        assert result == ModularEquation(
-            x='',
-            y='',
-            p=''
-        )
+        result = extract_modular_equations(text)
+        assert result == []
 
     def test_extract_modular_equation_empty_string(self):
         text = ""
-        result = extract_modular_equation(text)
-        assert result == ModularEquation(
-            x='',
-            y='',
-            p=''
-        )
+        result = extract_modular_equations(text)
+        assert len(result) == 0
 
     def test_extract_modular_equation_no_match(self):
         text = "This is just some random text"
-        result = extract_modular_equation(text)
-        assert result == ModularEquation(
-            x='',
-            y='',
-            p=''
-        )
+        result = extract_modular_equations(text)
+        assert result == []
 
     def test_extract_modular_equation_partial_match(self):
         text = "x * y ≡ 2 (mod p)"
-        result = extract_modular_equation(text)
-        assert result == ModularEquation(
-            x='',
-            y='',
-            p=''
-        )
+        result = extract_modular_equations(text)
+        assert len(result) == 0
 
     def test_extract_modular_equation_with_surrounding_text(self):
         text = "The equation x * y ≡ 1 (mod p) is important."
-        result = extract_modular_equation(text)
+        result = extract_modular_equations(text)[0]
         assert result is not None
         assert result.x == "x"
         assert result.y == "y"
@@ -81,16 +65,16 @@ class TestExtractModularEquation:
         ]
     )
     def test_extract_modular_equation_parametrized(self, text, expected_x, expected_y, expected_p):
-        result = extract_modular_equation(text)
-        assert result is not None
-        assert result.x == expected_x
-        assert result.y == expected_y
-        assert result.p == expected_p
+        result = extract_modular_equations(text)
+        assert len(result) == 1
+        assert result[0].x == expected_x
+        assert result[0].y == expected_y
+        assert result[0].p == expected_p
 
     def test_extract_modular_equation_returns_modular_equation_type(self):
         text = "x * y ≡ 1 (mod p)"
-        result = extract_modular_equation(text)
-        assert isinstance(result, ModularEquation)
+        result = extract_modular_equations(text)
+        assert isinstance(result, list)
 
 
 class TestValidateFormattingAndCorrectnessBulk:
