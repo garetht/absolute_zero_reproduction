@@ -99,7 +99,7 @@ class MegaBuffer:
     def reset(self) -> None:
         self.seed_buffer.extend(self.buffer)
         self.buffer = []
-        self.logprobs = torch.zeros_like(self.logprobs, device=self.logprobs.device)
+        self.logprobs = torch.zeros_like(self.logprobs, device=self.logprobs.device, requires_grad=True)
         self.sample_ids = torch.zeros_like(self.sample_ids, device=self.sample_ids.device)
         self.attention_masks = torch.zeros_like(self.attention_masks, device=self.attention_masks.device)
 

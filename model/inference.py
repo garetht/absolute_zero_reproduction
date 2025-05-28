@@ -56,19 +56,18 @@ def generate_response_bulk(
     )
 
     # Generate responses
-    with torch.no_grad():
-        outputs = model.generate(
-            inputs.input_ids.to(DEVICE),
-            attention_mask=inputs.attention_mask.to(DEVICE),
-            max_new_tokens=args.max_response_length,
-            do_sample=False,  # Greedy decoding
-            pad_token_id=tokenizer.pad_token_id,
-            return_dict_in_generate=True,
-            output_scores=True,
-        )
+    outputs = model(
+        inputs.input_ids.to(DEVICE),
+        attention_mask=inputs.attention_mask.to(DEVICE),
+        max_new_tokens=args.max_response_length,
+        do_sample=False,  # Greedy decoding
+        pad_token_id=tokenizer.pad_token_id,
+        return_dict_in_generate=True,
+        output_scores=True,
+    )
 
     # Extract generated tokens (excluding input tokens), shape (batch_size, actual_length)
-    generated_ids = outputs.sequences[:, inputs.input_ids.shape[1] :]
+    generated_ids = outputs.logits.argmax(dim=-1)
     actual_length = generated_ids.shape[1]
 
     # Decode responses
@@ -106,7 +105,7 @@ def generate_response_bulk(
     
     # Process logits and pad to max_response_length
     # logits are these shape: (actual_length, batch_size, vocab_size) before transpose
-    logits = torch.stack(outputs.scores, dim=0).transpose(0, 1)  # (batch_size, actual_length, vocab_size)
+    logits = outputs.logits
     logprobs = torch.log_softmax(logits, dim=-1)
     print("Receiving responses from model")
     for response in responses:
