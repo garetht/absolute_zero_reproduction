@@ -35,8 +35,8 @@ if __name__ == "__main__":
 
     mega_buffer = MegaBuffer(
         seed_buffer=[],
-        logprobs=torch.zeros((2, 3, args.batch_size, args.max_response_length, model.config.vocab_size)).to(DEVICE),
-        sample_ids=torch.tensor((2, 3, args.batch_size, args.max_response_length)).to(DEVICE)
+        logprobs=torch.zeros((2, 3, args.batch_size, args.max_response_length, model.config.vocab_size), device=DEVICE),
+        sample_ids=torch.tensor((2, 3, args.batch_size, args.max_response_length), device=DEVICE)
     )
 
     trainer = AZRTrainer(
