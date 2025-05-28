@@ -170,26 +170,27 @@ def compute_logprobs_for_tokens(
         attention_mask=full_attention_mask,
     )
     
-    # Extract logits for the generated portion only
-    logits = outputs.logits[:, prompt_ids.shape[1]:, :]  # Remove prompt portion
+    print(f"[DEBUG] Model outputs.logits.requires_grad: {outputs.logits.requires_grad}")
+    print(f"[DEBUG] Model outputs.logits.grad_fn: {outputs.logits.grad_fn}")
+    
+    # Extract logits for the generated portion only - use narrow to preserve gradients
+    prompt_len = prompt_ids.shape[1]
+    seq_len = outputs.logits.shape[1] - prompt_len
+    logits = outputs.logits.narrow(1, prompt_len, seq_len)
+    
+    print(f"[DEBUG] Extracted logits.requires_grad: {logits.requires_grad}")
+    print(f"[DEBUG] Extracted logits.grad_fn: {logits.grad_fn}")
     
     # Ensure we have the right length
     if logits.shape[1] != tokens.shape[1]:
         # Pad or truncate to match expected length
         if logits.shape[1] < tokens.shape[1]:
-            padding = torch.zeros(
-                (logits.shape[0], tokens.shape[1] - logits.shape[1], logits.shape[2]),
-                dtype=logits.dtype,
-                device=logits.device
-            )
+            # Create padding with requires_grad=True
+            padding_shape = (logits.shape[0], tokens.shape[1] - logits.shape[1], logits.shape[2])
+            padding = torch.zeros(padding_shape, dtype=logits.dtype, device=logits.device, requires_grad=True)
             logits = torch.cat([logits, padding], dim=1)
         else:
-            logits = logits[:, :tokens.shape[1], :]
-    
-    # Convert to log probabilities
-    logprobs = torch.log_softmax(logits, dim=-1)
-    
-    return logprobs
+            logits = logits.narrow(1, 0, tokens.shape[1])
 
 
 def remove_dvocab_from_logprobs(

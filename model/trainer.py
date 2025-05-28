@@ -305,14 +305,31 @@ class AZRTrainer:
             
             new_logprobs = torch.stack(new_logprobs_list).transpose(0, 1)  # (role, minibatch_size, seq_len)
             
-            new_logprobs = remove_dvocab_from_logprobs(new_logprobs, mini_batch.sample_ids)
             print(f"new_logprobs.requires_grad: {new_logprobs.requires_grad}")
             print(f"new_logprobs.grad_fn: {new_logprobs.grad_fn}")
             
             advantages = compute_advantages(self.args, minibatch_all_rewards)  # shape role task minibatch_size
             print(f"advantages.requires_grad: {advantages.requires_grad}")
             
-            objective = self.compute_azr_objective(advantages, new_logprobs, mini_batch.sample_ids,
+            # Build expanded logprobs properly without in-place operations
+            # Current: (role, minibatch_size, seq_len) 
+            # Expected: (role, task, minibatch_size, seq_len)
+            expanded_logprobs_list = []
+            for role in Role:
+                role_tasks_list = []
+                for task_type in TaskType:
+                    task_logprobs_list = []
+                    for mb_idx in range(self.args.minibatch_size):
+                        if mb_idx < len(mini_batch.samples) and mini_batch.samples[mb_idx].task_type == task_type:
+                            task_logprobs_list.append(new_logprobs[role.value, mb_idx])
+                        else:
+                            # Pad with zeros for non-matching problems
+                            task_logprobs_list.append(torch.zeros(self.args.max_response_length, device=DEVICE, dtype=self.args.dtype))
+                    role_tasks_list.append(torch.stack(task_logprobs_list))
+                expanded_logprobs_list.append(torch.stack(role_tasks_list))
+            expanded_logprobs = torch.stack(expanded_logprobs_list)
+            
+            objective = self.compute_azr_objective(advantages, expanded_logprobs, mini_batch.sample_ids,
                                                    mini_batch)
             print(f"objective.requires_grad: {objective.requires_grad}")
             print(f"objective.grad_fn: {objective.grad_fn}")
