@@ -110,6 +110,7 @@ class AZRTrainer:
 
         for batch_idx in range(self.args.train_batch_size):
             induction_sample: PrimeSample = self.mega_buffer.sample_from_buffer(num_to_sample=1)[0]
+            print(induction_sample)
 
             # INDUCTION
             valid_pairs, induction_logprobs, induction_sample_ids, induction_prompt_tokens, induction_answers = self.generate_and_validate_io_pairs(

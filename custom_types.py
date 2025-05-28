@@ -1,9 +1,9 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing_extensions import TypedDict, Literal
+from typing_extensions import TypedDict
 from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
 
-from typing import Generic, Literal, Optional, TypeVar
+from typing import Generic, Optional, TypeVar
 from jaxtyping import Int, Float
 from torch import Tensor
 
@@ -68,6 +68,10 @@ class PrimeSample(BaseSample):
         return int(self.snippet)
 
     function_io: list[IOPair[int]]
+
+    def __post_init__(self):
+        if len(self.function_io) == 0:
+            raise ValueError("a created PrimeSample must have at least one IOPair")
 
     @staticmethod
     def from_problem(
