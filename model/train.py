@@ -52,7 +52,6 @@ if __name__ == "__main__":
         )
 
     for phase in range(args.total_phases):
-        rewards = trainer.rollout_phase()
         trainer.learning_phase()
         # Add logging here
 
