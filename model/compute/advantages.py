@@ -1,3 +1,4 @@
+import torch
 from model.args import AZRArgs
 from jaxtyping import Float
 from torch import Tensor
@@ -10,6 +11,11 @@ def compute_advantages(args: AZRArgs, rewards: Float[Tensor, "role task minibatc
         return rewards
     
     # normalize each reward for each role and task by subtracting the mean and dividing by the standard deviation
-    rewards -= rewards.mean(dim=-1, keepdim=True)
-    rewards /= (rewards.std(dim=-1, keepdim=True) + args.eps)  # add a small constant to avoid division by zero
-    return rewards
+    mean = rewards.mean(dim=-1, keepdim=True)
+    std = rewards.std(dim=-1, keepdim=True)
+    
+    # Only add eps if std is actually zero to avoid division by zero
+    std = torch.where(std == 0, args.eps, std)
+    
+    normalized = (rewards - mean) / std
+    return normalized

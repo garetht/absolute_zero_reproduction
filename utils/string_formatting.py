@@ -293,11 +293,17 @@ def validate_single_response(response: str, config: dict) -> list[Answer]:
     return answers
 
 
-def create_sample_from_answer(answer: Answer, task_type: TaskType) -> BaseSample:
-    pass
+def create_problem_from_answer(answer: Answer, task_type: TaskType) -> Problem:
+    """Create a Problem from an Answer object"""
+    return Problem(
+        prime=answer.program,
+        x_list=[answer.input] if answer.input is not None else [0],
+        y_list=[answer.output] if answer.output is not None else [0], 
+        task_type=task_type
+    )
 
 
-def validate_solver_formatting_and_correctness(response: str, task_type: TaskType, sample: PrimeSample) -> Answer:
+def validate_solver_formatting_and_correctness(response: str, task_type: TaskType, sample: Problem) -> Answer:
     parsed_number = extract_boxed_number(response)
     if parsed_number is None:
         return INVALID_FORMATTING
@@ -305,16 +311,16 @@ def validate_solver_formatting_and_correctness(response: str, task_type: TaskTyp
     is_correct = False
     match task_type:
         case TaskType.ABDUCTION:
-            is_correct = parsed_number == sample.function_io[0].input_str
+            is_correct = parsed_number == sample.x
         case TaskType.DEDUCTION:
-            is_correct = parsed_number == sample.function_io[0].output_str
+            is_correct = parsed_number == sample.y
         case TaskType.INDUCTION:
             is_correct = parsed_number == sample.prime
 
     if is_correct:
         return Answer(
-            input=sample.function_io[0].input_str,
-            output=sample.function_io[0].output_str,
+            input=sample.x,
+            output=sample.y,
             program=sample.prime,
             reward=1.0
         )

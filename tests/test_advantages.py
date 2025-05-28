@@ -9,8 +9,7 @@ class TestComputeAdvantages:
     @pytest.fixture
     def args(self):
         """Create test AZRArgs with minimal required fields."""
-        args = AZRArgs()
-        args.eps = 1e-8  # Add eps attribute for normalization
+        args = AZRArgs(d_vocab=50257)  # Standard GPT-2 vocab size
         return args
     
     def test_compute_advantages_basic_normalization(self, args):

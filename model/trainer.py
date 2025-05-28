@@ -13,23 +13,23 @@ from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
 
 from buffer.base_buff import BaseBuffer, MegaBuffer
 from constants import DEVICE
-from custom_types import MiniBatch, TaskType, Role, IOPair, PrimeSample, Answer
+from custom_types import MiniBatch, TaskType, Role, IOPair, Answer, Problem
 from model.args import AZRArgs
 from model.compute.advantages import compute_advantages
 from model.compute.reward import compute_r_total
 from model.inference import generate_response, generate_response_bulk, remove_dvocab_from_logprobs
 from model.eval.baselines import run_baseline_evaluation_prime_samples
 from utils.string_formatting import validate_proposer_formatting_and_correctness, \
-    create_sample_from_answer, format_as_string, validate_single_response, CHECK_MAP
+    create_problem_from_answer, validate_single_response, CHECK_MAP
 
 
-def format_sample_from_io_pairs(program: int, prompt_tokens: Int[torch.Tensor, "max_prompt_len"],
-                                io_pairs: list[IOPair[int]]) -> PrimeSample:
-    return PrimeSample(
-        snippet=str(program),
-        message="",
-        prompt_tokens=prompt_tokens,
-        function_io=io_pairs
+def create_problem_from_io_pairs(prime: int, io_pairs: list[IOPair[int]]) -> Problem:
+    """Create a Problem from prime and IO pairs for induction"""
+    return Problem(
+        prime=prime,
+        x_list=[io.input_str for io in io_pairs],
+        y_list=[io.output_str for io in io_pairs],
+        task_type=TaskType.INDUCTION
     )
 
 
@@ -122,18 +122,17 @@ class AZRTrainer:
         all_rewards = torch.zeros((len(Role), len(TaskType), self.args.batch_size), device=DEVICE)
 
         for batch_idx in range(self.args.batch_size):
-            induction_sample: PrimeSample = self.mega_buffer.sample_from_buffer(num_to_sample=1)[0]
-            print(induction_sample)
+            induction_problem: Problem = self.mega_buffer.sample_from_buffer(num_to_sample=1)[0]
+            print(induction_problem)
 
             # INDUCTION
             valid_pairs, induction_logprobs, induction_sample_ids, induction_prompt_tokens, induction_answers, induction_attention_mask = self.generate_and_validate_io_pairs(
-                induction_sample,
+                induction_problem,
                 self.args.n_samples_to_estimate_task_accuracy)
 
             if len(valid_pairs) > 0:
-                sample = format_sample_from_io_pairs(induction_sample.prime, induction_prompt_tokens,
-                                                     [io for io in valid_pairs])
-                self.mega_buffer.buffer.append(sample)
+                problem = create_problem_from_io_pairs(induction_problem.prime, valid_pairs)
+                self.mega_buffer.buffer.append(problem)
 
             # ABDUCTION and DEDUCTION
             abduction_response, abduction_logprobs, abduction_sample_ids, abduction_attention_mask = self.propose_task(
@@ -147,13 +146,13 @@ class AZRTrainer:
 
             # if the abduction answer has valid formatting
             if abduction_answer.reward >= 0:
-                sample = create_sample_from_answer(abduction_answer, TaskType.ABDUCTION)
-                self.mega_buffer.buffer.append(sample)
+                problem = create_problem_from_answer(abduction_answer, TaskType.ABDUCTION)
+                self.mega_buffer.buffer.append(problem)
 
             # if the deduction answer has valid formatting
             if deduction_answer.reward >= 0:
-                sample = create_sample_from_answer(deduction_answer, TaskType.DEDUCTION)
-                self.mega_buffer.buffer.append(sample)
+                problem = create_problem_from_answer(deduction_answer, TaskType.DEDUCTION)
+                self.mega_buffer.buffer.append(problem)
 
             # BEFORE SOLVING, WRITE LOGPROBS TO THE MEGA BUFFER AND PARTIAL REWARDS TO OUR TENSOR
             # write logprobs to the mega buffer
@@ -191,8 +190,8 @@ class AZRTrainer:
 
         # SOLVE PROBLEMS
         for task_type in TaskType:
-            samples: list[PrimeSample] = self.mega_buffer.sample_from_buffer(num_to_sample=self.args.batch_size)
-            task_prompts = [format_as_string(s, task_type, Role.SOLVER) for s in samples]
+            problems: list[Problem] = self.mega_buffer.sample_from_buffer(num_to_sample=self.args.batch_size)
+            task_prompts = [problem.get_prompt(Role.SOLVER) for problem in problems]
             responses, logprobs, sample_ids, prompt_ids, attention_masks = generate_response_bulk(self.args,
                                                                                                   self.training_model,
                                                                                                   self.tokenizer,
@@ -210,7 +209,7 @@ class AZRTrainer:
                 # we want to pass proposer_format rewards and samples, from which we can compute r_solve
                 # TODO - compute formatting rewards for the solver response before rtotal?
                 # ie convert response to answer objects (which store the formatting reward)
-                all_rewards[role.value][task_type.value] = compute_r_total(self.args, samples, responses, role,
+                all_rewards[role.value][task_type.value] = compute_r_total(self.args, problems, responses, role,
                                                                            task_type,
                                                                            r_format_proposer)
 
@@ -218,18 +217,18 @@ class AZRTrainer:
 
     def propose_task(self, task_type: TaskType) -> tuple[
         str, Float[torch.Tensor, "seq_len vocab_size"], Int[torch.Tensor, "seq_len"], Int[torch.Tensor, "seq_len"]]:
-        sample = self.mega_buffer.sample_from_buffer(num_to_sample=1)[0]
-        prompt = format_as_string(sample, task_type, Role.PROPOSER)
+        problem = self.mega_buffer.sample_from_buffer(num_to_sample=1)[0]
+        prompt = problem.get_prompt(Role.PROPOSER)
         response, logprobs, sample_ids, prompt_tokens, attention_mask = generate_response(self.args,
                                                                                           self.training_model,
                                                                                           self.tokenizer, prompt)
-        sample.prompt_tokens = prompt_tokens
+        # Note: prompt_tokens no longer needed since Problem caches prompts
         return response, logprobs, sample_ids, attention_mask
 
-    def generate_and_validate_io_pairs(self, program: PrimeSample, num_io_pairs: int) -> tuple[
+    def generate_and_validate_io_pairs(self, program: Problem, num_io_pairs: int) -> tuple[
         list[IOPair], Float[torch.Tensor, "seq_len vocab_size"], Int[torch.Tensor, "seq_len"], Int[
             torch.Tensor, "max_prompt_len"], list[Answer], Int[torch.Tensor, "seq_len"]]:
-        induction_prompt = format_as_string(program, TaskType.INDUCTION, Role.PROPOSER, num_io_pairs)
+        induction_prompt = program.get_prompt(Role.PROPOSER)
         response, logprobs, sample_ids, prompt_tokens, attention_mask = generate_response(self.args,
                                                                                           self.training_model,
                                                                                           self.tokenizer,
@@ -239,7 +238,7 @@ class AZRTrainer:
         valid_answers = [a for a in answers if a.is_valid]
 
         io_pairs = [IOPair(input_str=e.input, output_str=e.output) for e in valid_answers]
-        program.prompt_tokens = prompt_tokens
+        # Note: prompt_tokens no longer needed since Problem caches prompts
         return io_pairs, logprobs, sample_ids, prompt_tokens, answers, attention_mask
 
     def learning_phase(self) -> None:
@@ -257,17 +256,36 @@ class AZRTrainer:
         all_rewards = self.rollout_phase()
 
         # now do minibatch policy updates
-        for mini_batch in self.mega_buffer.get_minibatches():
+        for mini_batch in self.mega_buffer.get_minibatches(self.training_model, self.tokenizer):
             self.step += 1
             # first do a forward pass on current policy to get the logprobs used in importance ratio
-            # get the prompts that we need to use for the forawrd
-            prompts = [self.tokenizer.decode(s.prompt_tokens, skip_special_tokens=True) for s in mini_batch.samples]
-            _, logprobs, sample_ids, _, attention_masks = generate_response_bulk(
-                self.args, self.training_model, self.tokenizer, prompts
+            # generate for both roles since loss uses both proposer and solver logprobs
+            new_logprobs = torch.zeros(
+                (len(Role), len(TaskType), self.args.minibatch_size, self.args.max_response_length, self.args.d_vocab),
+                device=DEVICE, dtype=self.args.dtype
             )
-            logprobs = remove_dvocab_from_logprobs(logprobs, sample_ids)
+            new_sample_ids = torch.zeros(
+                (len(Role), len(TaskType), self.args.minibatch_size, self.args.max_response_length),
+                device=DEVICE, dtype=torch.int
+            )
+            new_attention_masks = torch.zeros(
+                (len(Role), len(TaskType), self.args.minibatch_size, self.args.max_response_length),
+                device=DEVICE, dtype=torch.int
+            )
+            
+            for role in Role:
+                prompts = [problem.get_prompt(role) for problem in mini_batch.samples]
+                _, logprobs, sample_ids, _, attention_masks = generate_response_bulk(
+                    self.args, self.training_model, self.tokenizer, prompts
+                )
+                # Fill tensor for this role across all task types (but only the problem's specific task type matters)
+                for mb_idx, problem in enumerate(mini_batch.samples):
+                    new_logprobs[role.value, problem.task_type.value, mb_idx] = logprobs[mb_idx]
+                    new_sample_ids[role.value, problem.task_type.value, mb_idx] = sample_ids[mb_idx]
+                    new_attention_masks[role.value, problem.task_type.value, mb_idx] = attention_masks[mb_idx]
+            new_logprobs = remove_dvocab_from_logprobs(new_logprobs, new_sample_ids)
             advantages = compute_advantages(self.args, all_rewards)  # shape role task minibatch_size
-            objective = self.compute_azr_objective(advantages, logprobs, sample_ids,
+            objective = self.compute_azr_objective(advantages, new_logprobs, new_sample_ids,
                                                    mini_batch)
             self.optimizer.zero_grad()
             objective.backward()

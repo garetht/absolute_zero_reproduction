@@ -116,7 +116,7 @@ def generate_problems(n: int, primes: list[int], seed: int = 42) -> list[Problem
         x = r.randint(1, p - 1)
         y = modular_inverse(x, p)
         task_type = r.choice(list(TaskType))
-        prob = Problem(prime=p, x=x, y=y, task_type=task_type)
+        prob = Problem(prime=p, x_list=[x], y_list=[y], task_type=task_type)
         problems.append(prob)
     return problems
 
