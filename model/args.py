@@ -56,3 +56,4 @@ class AZRArgs:
     batch_size = minibatch_size * n_minibatches
     d_vocab: int = 50257  # Default for GPT-2 and similar models
     clip_ratio: float = 0.2
+    eps: float = 1e-5
