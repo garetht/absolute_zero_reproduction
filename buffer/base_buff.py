@@ -9,9 +9,6 @@ from model.eval.prime_inversion import get_problems, PRIMES
 from custom_types import MiniBatch, Role, TaskType, BaseSample, PrimeSample
 
 
-from typing import Optional
-
-
 class BaseBuffer:
     """
     Base class for the buffer objects (also class for the seed buffer).
@@ -95,13 +92,11 @@ class MegaBuffer:
         return [self.combined_buffer[i] for i in indices]
 
     def initialize_seed_buffer(
-        self, tokenizer: PreTrainedTokenizerFast, num_samples: Optional[int]
+        self, tokenizer: PreTrainedTokenizerFast, num_samples: int = 1
     ) -> None:
         """
         Initialize seed buffer with k (default 1) samples
         """
-        num_samples = 1 if num_samples is None else num_samples
-
         problems = get_problems(n=num_samples, primes=PRIMES, seed=self.args.seed)
         self.seed_buffer.extend(
             [
