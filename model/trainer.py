@@ -21,16 +21,6 @@ from utils.validate_by_executing import validate_by_executing_induction, validat
 from utils.string_formatting import format_task_prompts, format_for_abduction, format_for_induction
 
 
-def create_optimizer_and_scheduler() -> torch.optim.Optimizer:
-    """
-    Create AdamW optimizer and learning rate scheduler.
-    
-    Returns:
-        torch.optim.Optimizer: Configured AdamW optimizer with scheduler.
-    """
-    ...
-
-
 def format_sample_from_io_pairs(valid_pairs_and_rewards: list[IOPair]) -> BaseSample:
     pass
 
@@ -45,9 +35,6 @@ def validate_formatting_and_correctness_bulk(responses: list[str], task_type: Ta
 
 def create_sample_from_answer(answer: Answer, task_type: TaskType) -> BaseSample:
     pass
-
-
-
 
 
 class AZRTrainer:
@@ -66,7 +53,9 @@ class AZRTrainer:
     step: int
     tokenizer: PreTrainedTokenizerFast
 
-    def __init__(self, args: AZRArgs, mega_buffer: MegaBuffer, tokenizer: PreTrainedTokenizerFast,
+    def __init__(self, args: AZRArgs, mega_buffer: MegaBuffer,
+                 tokenizer: PreTrainedTokenizerFast,
+                 optimizer: torch.optim.Optimizer,
                  training_model: AutoModelForCausalLM):
         """
         Initialize the AZR trainer with models and configuration.
@@ -78,7 +67,7 @@ class AZRTrainer:
         self.args = args
         self.training_model = training_model
         self.tokenizer = tokenizer
-        self.optimizer = create_optimizer_and_scheduler()
+        self.optimizer = optimizer
         self.mega_buffer = mega_buffer
         self.step = 0
 
