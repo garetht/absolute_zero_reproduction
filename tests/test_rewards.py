@@ -70,7 +70,7 @@ class TestComputeRTotal:
         answer.reward = -1.0
         return answer
     
-    @patch('model.compute.reward.validate_formatting_and_correctness')
+    @patch('model.compute.reward.validate_solver_formatting_and_correctness')
     @patch('model.compute.reward.compute_r_propose')
     def test_compute_r_total_proposer_valid_format(self, mock_r_propose, mock_validate):
         """Test r_total for proposer with valid formatting."""
@@ -79,10 +79,13 @@ class TestComputeRTotal:
         mock_validate.return_value = mock_answer
         mock_r_propose.return_value = torch.tensor([0.7])
         
+        # Create mock samples for each response
+        mock_samples = [Mock() for _ in range(2)]
         solver_responses = ["response1", "response2"]
         r_proposer_format = torch.tensor([0.5, 0.8])
         
         result = compute_r_total(
+            mock_samples,
             solver_responses, 
             Role.PROPOSER, 
             TaskType.ABDUCTION,
@@ -92,17 +95,20 @@ class TestComputeRTotal:
         # Should return r_propose value since r_proposer_format >= 0
         assert torch.allclose(result, torch.tensor([0.7, 0.7]))
     
-    @patch('model.compute.reward.validate_formatting_and_correctness')
+    @patch('model.compute.reward.validate_solver_formatting_and_correctness')
     def test_compute_r_total_proposer_invalid_format(self, mock_validate):
         """Test r_total for proposer with invalid formatting."""
         # Setup mock
         mock_answer = Mock(reward=0.5)
         mock_validate.return_value = mock_answer
         
+        # Create mock samples for each response
+        mock_samples = [Mock() for _ in range(2)]
         solver_responses = ["response1", "response2"]
         r_proposer_format = torch.tensor([-1.0, -2.0])
         
         result = compute_r_total(
+            mock_samples,
             solver_responses,
             Role.PROPOSER,
             TaskType.DEDUCTION,
@@ -112,17 +118,20 @@ class TestComputeRTotal:
         # Should return r_proposer_format values since they're < 0
         assert torch.allclose(result, r_proposer_format)
     
-    @patch('model.compute.reward.validate_formatting_and_correctness')
+    @patch('model.compute.reward.validate_solver_formatting_and_correctness')
     def test_compute_r_total_solver(self, mock_validate):
         """Test r_total for solver role."""
         # Setup mock answers with different rewards
         mock_answers = [Mock(reward=0.8), Mock(reward=0.6), Mock(reward=1.0)]
         mock_validate.side_effect = mock_answers
         
+        # Create mock samples for each response
+        mock_samples = [Mock() for _ in range(3)]
         solver_responses = ["resp1", "resp2", "resp3"]
         r_proposer_format = torch.tensor([0.0, 0.0, 0.0])  # Not used for solver
         
         result = compute_r_total(
+            mock_samples,
             solver_responses,
             Role.SOLVER,
             TaskType.INDUCTION,
@@ -133,7 +142,7 @@ class TestComputeRTotal:
         expected = torch.tensor([0.8, 0.6, 1.0])
         assert torch.allclose(result, expected)
     
-    @patch('model.compute.reward.validate_formatting_and_correctness')
+    @patch('model.compute.reward.validate_solver_formatting_and_correctness')
     @patch('model.compute.reward.compute_r_propose')
     def test_compute_r_total_mixed_proposer_format(self, mock_r_propose, mock_validate):
         """Test with mixed positive and negative r_proposer_format values."""
@@ -142,10 +151,13 @@ class TestComputeRTotal:
         mock_validate.return_value = mock_answer
         mock_r_propose.return_value = torch.tensor([0.4])
         
+        # Create mock samples for each response
+        mock_samples = [Mock() for _ in range(4)]
         solver_responses = ["resp1", "resp2", "resp3", "resp4"]
         r_proposer_format = torch.tensor([0.5, -1.0, 0.0, -2.0])
         
         result = compute_r_total(
+            mock_samples,
             solver_responses,
             Role.PROPOSER,
             TaskType.ABDUCTION,
@@ -158,22 +170,25 @@ class TestComputeRTotal:
         assert torch.allclose(result, expected)
     
     @pytest.mark.parametrize("task_type", list(TaskType))
-    @patch('model.compute.reward.validate_formatting_and_correctness')
+    @patch('model.compute.reward.validate_solver_formatting_and_correctness')
     def test_compute_r_total_all_task_types(self, mock_validate, task_type):
         """Test that all task types are handled correctly."""
         mock_answer = Mock(reward=0.75)
         mock_validate.return_value = mock_answer
         
+        # Create mock sample
+        mock_samples = [Mock()]
         solver_responses = ["response"]
         r_proposer_format = torch.tensor([0.5])
         
         result = compute_r_total(
+            mock_samples,
             solver_responses,
             Role.SOLVER,
             task_type,
             r_proposer_format
         )
         
-        # Verify validate was called with correct task_type
-        mock_validate.assert_called_with("response", task_type)
+        # Verify validate was called with correct task_type and sample
+        mock_validate.assert_called_with("response", task_type, mock_samples[0])
         assert torch.allclose(result, torch.tensor([0.75]))
