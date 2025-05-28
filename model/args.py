@@ -19,7 +19,6 @@ class AZRArgs:
 
     # Duration of different phases
     total_phases: int = 100
-    batch_size: int = 32
 
     # Optimization hyperparameters
     max_grad_norm: float = 1.0
@@ -41,7 +40,6 @@ class AZRArgs:
 
     # Training Settings
     lr: float = 1e-6
-    train_batch_size: int = 16 * 6
     grad_clip: float = 1.0
     total_steps: int = 500
 
@@ -54,8 +52,8 @@ class AZRArgs:
     k_references: int = 6
     n_samples_to_estimate_task_accuracy: int = 8
     # our params
-    n_minibatches: int = 16
-    minibatch_size: int = 8
+    n_minibatches: int = 8
+    minibatch_size: int = 4
     batch_size = minibatch_size * n_minibatches
     clip_ratio: float = 0.2
     eps: float = 1e-5
