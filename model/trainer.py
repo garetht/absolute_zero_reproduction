@@ -16,25 +16,11 @@ from model.args import AZRArgs
 from model.compute.advantages import compute_advantages
 from model.compute.reward import compute_r_total
 from model.inference import generate_response, generate_response_bulk, remove_dvocab_from_logprobs
-from custom_types import Answer, MiniBatch, TaskType, Role, BaseSample, IOPair
-from utils.validate_by_executing import validate_by_executing_induction, validate_by_executing_deduction_abduction
-from utils.string_formatting import format_task_prompts, format_for_abduction, format_for_induction
-
-
-def format_sample_from_io_pairs(valid_pairs_and_rewards: list[IOPair]) -> BaseSample:
-    pass
-
-def extract_io_pairs_from_string(response: str, num_io_pairs: int) -> list[IOPair]:
-    pass
-
-def validate_formatting_and_correctness(response: str, task_type: TaskType) -> Answer:
-    return validate_formatting_and_correctness_bulk([response], task_type)[0]
-
-def validate_formatting_and_correctness_bulk(responses: list[str], task_type: TaskType) -> list[Answer]:
-    pass # call validate by executing?
-
-def create_sample_from_answer(answer: Answer, task_type: TaskType) -> BaseSample:
-    pass
+from custom_types import MiniBatch, TaskType, Role, BaseSample, IOPair
+from utils.validate_by_executing import validate_by_executing_induction
+from utils.string_formatting import format_task_prompts, format_for_abduction, format_for_induction, \
+    format_sample_from_io_pairs, extract_io_pairs_from_string, validate_formatting_and_correctness, \
+    create_sample_from_answer
 
 
 class AZRTrainer:
