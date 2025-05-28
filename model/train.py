@@ -4,7 +4,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
 import wandb
 
-from constants import MODEL_NAME
+from constants import MODEL_NAME, DEVICE
 
 from buffer.base_buff import MegaBuffer
 
@@ -18,7 +18,7 @@ if __name__ == "__main__":
         use_wandb=use_wandb,
         run_name=run_name,
     )
-    model = AutoModelForCausalLM.from_pretrained(MODEL_NAME)
+    model = AutoModelForCausalLM.from_pretrained(MODEL_NAME, device_map=DEVICE)
 
     tokenizer = AutoTokenizer.from_pretrained(
         MODEL_NAME,
@@ -33,13 +33,36 @@ if __name__ == "__main__":
         lr=args.lr,  # do we want to set beta?
     )
 
-    mega_buffer = MegaBuffer()
+    mega_buffer = MegaBuffer(
+        args=args,
+        logprobs=torch.empty(
+            (
+                len(args.roles),
+                len(args.task_types),
+                args.batch_size,
+                args.max_response_length,
+                args.d_vocab,
+            ),
+            dtype=torch.Float,
+        ),
+        sample_ids=torch.empty(
+            (
+                len(args.roles),
+                len(args.task_types),
+                args.batch_size,
+                args.max_response_length,
+            ),
+            dtype=torch.int,
+        ),
+    )
+    mega_buffer.initialize_seed_buffer(tokenizer)
 
     trainer = AZRTrainer(
         args=args,
         mega_buffer=mega_buffer,
         tokenizer=tokenizer,
-        train_model=model,
+        training_model=model,
+        optimizer=optimizer,
         run_name=args.run_name,
     )
 

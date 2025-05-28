@@ -1,6 +1,7 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from typing_extensions import TypedDict, Literal
+from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
 
 from typing import Generic, Literal, Optional, TypeVar
 from jaxtyping import Int, Float
@@ -68,6 +69,23 @@ class PrimeSample(BaseSample):
 
     function_io: list[IOPair[int]]
 
+    @staticmethod
+    def from_problem(
+        problem: "Problem", tokenizer: PreTrainedTokenizerFast, max_prompt_length: int
+    ) -> "PrimeSample":
+        prompt = f"Find the inverse of {problem.x} modulo {problem.prime}."
+        prompt_tokens = tokenizer(
+            prompt,
+            padding="max_length",
+            max_length=max_prompt_length,
+        )[0]
+        return PrimeSample(
+            snippet=str(problem.prime),
+            function_io=[IOPair(input_str=problem.x, output_str=problem.y)],
+            message=str(prompt),
+            prompt_tokens=prompt_tokens,
+        )
+
 
 class ProblemResult(TypedDict):
     problem: str
@@ -85,33 +103,39 @@ class Problem:
     task_type: TaskType
 
     @property
-    def blank(self) -> Literal['x', 'y', 'p']:
+    def blank(self) -> Literal["x", "y", "p"]:
         match self.task_type:
             case TaskType.ABDUCTION:
-                blank = 'x'
+                blank = "x"
             case TaskType.DEDUCTION:
-                blank = 'y'
+                blank = "y"
             case TaskType.INDUCTION:
-                blank = 'p'
+                blank = "p"
 
         return blank
 
     def __repr__(self) -> str:
         """Return a nicely formatted string representation of the problem."""
-        if self.blank == 'x':
-            return f"Find x such that x * {self.y} ≡ 1 (mod {self.prime}) [x = {self.x}]"
-        elif self.blank == 'y':
-            return f"Find y such that {self.x} * y ≡ 1 (mod {self.prime}) [y = {self.y}]"
+        if self.blank == "x":
+            return (
+                f"Find x such that x * {self.y} ≡ 1 (mod {self.prime}) [x = {self.x}]"
+            )
+        elif self.blank == "y":
+            return (
+                f"Find y such that {self.x} * y ≡ 1 (mod {self.prime}) [y = {self.y}]"
+            )
         else:
-            return f"Find a p such that {self.x} * {self.y} ≡ 1 (mod p) [p = {self.prime}]"
+            return (
+                f"Find a p such that {self.x} * {self.y} ≡ 1 (mod p) [p = {self.prime}]"
+            )
 
     @staticmethod
-    def from_prime_sample(prime_sample: PrimeSample, task_type: TaskType) -> 'Problem':
+    def from_prime_sample(prime_sample: PrimeSample, task_type: TaskType) -> "Problem":
         return Problem(
             prime=prime_sample.prime,
             x=prime_sample.function_io[0].input_str,
             y=prime_sample.function_io[0].output_str,
-            task_type=task_type
+            task_type=task_type,
         )
 
 
@@ -131,4 +155,3 @@ class MiniBatch:
     samples: list[BaseSample]
     sample_ids: Int[Tensor, "role task minibatch_size seq_len"]
     logprobs: Float[Tensor, "role task minibatch_size max_response_length vocab_size"]
-
