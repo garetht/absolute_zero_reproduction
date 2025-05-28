@@ -1,4 +1,5 @@
 import random
+from typing import Optional
 
 from custom_types import Problem, TaskType
 
@@ -27,11 +28,11 @@ def is_prime(n: int) -> bool:
     return True
 
 
-def solve_modular_inverse(p: int, x=None, y=None, verbose: bool = False) -> int:
+def solve_modular_inverse(p: Optional[int] = None, x: Optional[int] = None, y: Optional[int] = None,
+                          verbose: bool = False) -> set[int]:
     """
     Solves for the unknown in xy ≡ 1 mod p, where p is prime, and one of x or y is given.
 
-    TODO: add prime solving by checking in PRIMES
     Args:
         p (int): A prime modulus.
         x (int, optional): The value of x. If None, y must be given.
@@ -39,23 +40,36 @@ def solve_modular_inverse(p: int, x=None, y=None, verbose: bool = False) -> int:
         verbose (bool, optional): Whether to print solving steps.
 
     Returns:
-        int: The value of the unknown variable (mod p).
+        set[int]: All answers that will satisfy the problem. Only missing primes
+        will have multiple possible solutions.
     """
-    if (x is None and y is None) or (x is not None and y is not None):
-        raise ValueError("Exactly one of x or y must be provided.")
-    if x is not None:
+    values = [p, x, y]
+
+    none_count = sum(1 for val in values if val is None)
+    if none_count > 1:
+        raise ValueError("At most one of p, x, y can be None")
+
+    if x is not None and p is not None:
         # Compute modular inverse of x mod p
         result = pow(x, -1, p)
         if verbose:
             print(f"Given x = {x}, solving for y such that x*y ≡ 1 mod {p}: y = {result}")
-        return result
-    else:
+        return {result}
+    elif y is not None and p is not None:
         # Compute modular inverse of y mod p
         result = pow(y, -1, p)
         if verbose:
             print(f"Given y = {y}, solving for x such that x*y ≡ 1 mod {p}: x = {result}")
-        return result
+        return {result}
+    elif x is not None and y is not None:
+        satisfying_primes = set()
+        for prime in PRIMES:
+            if (x * y) % prime == 1:
+                satisfying_primes.add(prime)
 
+        return satisfying_primes
+
+    raise ValueError("No values were provided")
 
 def modular_inverse(a: int, p: int) -> int:
     # Using Fermat's little theorem to compute modular inverse: a^(p-2) mod p
