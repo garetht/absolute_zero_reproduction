@@ -1,15 +1,44 @@
 import re
-
-from typing import Optional, Callable
+from typing import Optional
 from dataclasses import dataclass
-from custom_types import BaseSample, TaskType, IOPair, Answer, PrimeSample, Problem, Role
-from model.eval.prime_inversion import validate_modular_inverse, solve_modular_inverse
+from custom_types import BaseSample, TaskType, Answer, PrimeSample, Problem, Role
+from model.eval.prime_inversion import solve_modular_inverse
+END_OF_USER_MESSAGE = """
+<|im_end|>
+<|im_start|>assistant
+"""
 
 BOXED_NUMBER = """
 Provide your answer as a single boxed number within e.g. \[
 \\boxed{{x}}
-\]<|im_end|>
-<|im_start|>assistant
+\]
+"""
+
+BOXED_NUMBER_X = """
+Provide your answer as a single boxed number within e.g. \[
+\\boxed{{x}}
+\]
+"""
+
+BOXED_NUMBER_Y = """
+Provide your answer as a single boxed number within e.g. \[
+\\boxed{{y}}
+\]
+"""
+
+BOXED_NUMBER_P = """
+Provide your answer as a single boxed number within e.g. \[
+\\boxed{{p}}
+\]
+"""
+# TODO wrap this in a box?
+BOXED_XY_PAIRS = """
+Provide your answer as {num_io_pairs} equation(s) in the format:
+equation_1
+equation_2
+...
+
+Each equation should follow the pattern: x * y ≡ 1 (mod p)
 """
 
 ABDUCTION_SOLVER_PROMPT = """<|im_start|>user
@@ -17,36 +46,54 @@ Given a prime number p and an integer y, find x such that:
 
 x * {y} ≡ 1 (mod {prime})
 
-{boxed_number}
-"""
+{boxed_number}{end_message}"""
 
 DEDUCTION_SOLVER_PROMPT = """<|im_start|>user
 Given a prime number p and an integer x, find y such that:
 
 {x} * y ≡ 1 (mod {prime})
 
-{boxed_number}
-"""
+{boxed_number}{end_message}"""
 
 INDUCTION_SOLVER_PROMPT = """<|im_start|>user
 Given integers x and y, find a p such that:
 
 {x} * {y} ≡ 1 (mod p)
 
-{boxed_number}
-"""
+{boxed_number}{end_message}"""
 
 ABDUCTION_PROPOSER_PROMPT = """<|im_start|>user
+Task: Create a prime inversion equation with one missing input, x. There should be a single solution for x.
+Using the reference example provided below, create your own unique equation.
 
-"""
+Reference Example:
+x * {y} ≡ 1 (mod {prime})
+
+Create a new equation following this pattern:
+x * [your_y] ≡ 1 (mod [your_prime])
+
+{boxed_number}{end_message}"""
 
 DEDUCTION_PROPOSER_PROMPT = """<|im_start|>user
+Task: Create a prime inversion equation with one missing input, y. There should be a single solution for y.
+Using the reference example provided below, create your own unique equation.
 
-"""
+Reference Example:
+{x} * y ≡ 1 (mod {prime})
+
+Create a new equation following this pattern:
+[your_x] * y ≡ 1 (mod [your_prime])
+
+{boxed_number}{end_message}"""
 
 INDUCTION_PROPOSER_PROMPT = """<|im_start|>user
+Task: Create {num_io_pairs} prime inversion equation(s) with one missing prime, p. There should be at least one valid solution for p that works for all equations.
+Using the reference example provided below, create your own unique equation(s).
 
-"""
+Reference Example:
+{x} * {y} ≡ 1 (mod p)
+
+{boxed_number}{end_message}"""
 
 
 @dataclass
@@ -266,12 +313,21 @@ def validate_solver_formatting_and_correctness(response: str, task_type: TaskTyp
 def create_proposer_prompt(problem: Problem, num_io_pairs: Optional[int] = None) -> str:
     match problem.task_type:
         case TaskType.ABDUCTION:
-            prompt = ABDUCTION_PROPOSER_PROMPT.format(y=problem.y, prime=problem.prime, boxed_number=BOXED_NUMBER)
+            prompt = ABDUCTION_PROPOSER_PROMPT.format(y=problem.y, prime=problem.prime, 
+                                                    boxed_number=BOXED_NUMBER_X,
+                                                    end_message=END_OF_USER_MESSAGE)
         case TaskType.DEDUCTION:
-            prompt = DEDUCTION_PROPOSER_PROMPT.format(x=problem.x, prime=problem.prime, boxed_number=BOXED_NUMBER)
+            prompt = DEDUCTION_PROPOSER_PROMPT.format(x=problem.x, prime=problem.prime, 
+                                                    boxed_number=BOXED_NUMBER_Y,
+                                                    end_message=END_OF_USER_MESSAGE)
         case TaskType.INDUCTION:
-            prompt = INDUCTION_PROPOSER_PROMPT.format(x=problem.x, y=problem.y, boxed_number=BOXED_NUMBER,
-                                                      num_io_pairs=num_io_pairs)
+            # Default to 1 if num_io_pairs is not specified
+            pairs_count = num_io_pairs if num_io_pairs is not None else 1
+            boxed_pairs = BOXED_XY_PAIRS.format(num_io_pairs=pairs_count)
+            prompt = INDUCTION_PROPOSER_PROMPT.format(x=problem.x, y=problem.y, 
+                                                    num_io_pairs=pairs_count,
+                                                    boxed_number=boxed_pairs,
+                                                    end_message=END_OF_USER_MESSAGE)
         case _:
             raise ValueError(f"invalid blank value {problem.blank}")
 
@@ -293,11 +349,17 @@ def create_solver_prompt(problem: Problem) -> str:
     """
     match problem.blank:
         case "x":
-            prompt = ABDUCTION_SOLVER_PROMPT.format(y=problem.y, prime=problem.prime, boxed_number=BOXED_NUMBER)
+            prompt = ABDUCTION_SOLVER_PROMPT.format(y=problem.y, prime=problem.prime, 
+                                                  boxed_number=BOXED_NUMBER_X,
+                                                  end_message=END_OF_USER_MESSAGE)
         case "y":
-            prompt = DEDUCTION_SOLVER_PROMPT.format(x=problem.x, prime=problem.prime, boxed_number=BOXED_NUMBER)
+            prompt = DEDUCTION_SOLVER_PROMPT.format(x=problem.x, prime=problem.prime, 
+                                                  boxed_number=BOXED_NUMBER_Y,
+                                                  end_message=END_OF_USER_MESSAGE)
         case "p":
-            prompt = INDUCTION_SOLVER_PROMPT.format(x=problem.x, y=problem.y, boxed_number=BOXED_NUMBER)
+            prompt = INDUCTION_SOLVER_PROMPT.format(x=problem.x, y=problem.y, 
+                                                  boxed_number=BOXED_NUMBER_P,
+                                                  end_message=END_OF_USER_MESSAGE)
         case _:
             raise ValueError(f"invalid blank value {problem.blank}")
 
