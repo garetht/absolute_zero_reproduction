@@ -19,7 +19,7 @@ class AZRArgs:
 
     # Duration of different phases
     total_phases: int = 100
-    batch_size: int = 64
+    batch_size: int = 32
 
     # Optimization hyperparameters
     max_grad_norm: float = 1.0
@@ -35,13 +35,13 @@ class AZRArgs:
 
     # Model Configuration
     max_prompt_length: int = 6144
-    max_response_length: int = 512
+    max_response_length: int = 128
     seed_batch_factor: int = 4
     max_programs: int = 16384
 
     # Training Settings
     lr: float = 1e-6
-    train_batch_size: int = 64 * 6
+    train_batch_size: int = 16 * 6
     grad_clip: float = 1.0
     total_steps: int = 500
 
