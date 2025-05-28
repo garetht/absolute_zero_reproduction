@@ -4,7 +4,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
 import wandb
 
-from constants import MODEL_NAME
+from constants import MODEL_NAME, DEVICE
 
 from buffer.base_buff import MegaBuffer
 
@@ -22,7 +22,6 @@ if __name__ == "__main__":
 
     tokenizer = AutoTokenizer.from_pretrained(
         MODEL_NAME,
-        device_map=DEVICE,
         padding_side="left",
     )
     # Set up tokenizer eos
