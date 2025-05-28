@@ -119,7 +119,7 @@ class AZRTrainer:
             BaseBuffer: BaseBuffer containing rollout data for the learning phase.
         """
         proposer_format_correctness_rewards = torch.zeros((len(TaskType), self.args.batch_size), device=DEVICE)
-        all_rewards = torch.zeros((len(TaskType), self.args.batch_size), device=DEVICE)
+        all_rewards = torch.zeros((len(Role), len(TaskType), self.args.batch_size), device=DEVICE)
 
         for batch_idx in range(self.args.batch_size):
             induction_sample: PrimeSample = self.mega_buffer.sample_from_buffer(num_to_sample=1)[0]
