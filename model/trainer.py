@@ -33,6 +33,26 @@ def create_problem_from_io_pairs(prime: int, io_pairs: list[IOPair[int]]) -> Pro
     )
 
 
+def debug_gradient_info(tensor, name, location=""):
+    """Helper function to log gradient information"""
+    if tensor is None:
+        print(f"[GRAD_DEBUG] {location} - {name}: None")
+        return
+
+    print(f"[GRAD_DEBUG] {location} - {name}:")
+    print(f"  requires_grad: {tensor.requires_grad}")
+    print(f"  grad_fn: {tensor.grad_fn}")
+    print(f"  is_leaf: {tensor.is_leaf}")
+    print(f"  shape: {tensor.shape}")
+    print(f"  device: {tensor.device}")
+    print(f"  dtype: {tensor.dtype}")
+    if hasattr(tensor, 'grad') and tensor.grad is not None:
+        print(f"  has_grad: True (shape: {tensor.grad.shape})")
+    else:
+        print(f"  has_grad: False")
+    print()
+
+
 class AZRTrainer:
     """
     AZR (Adaptive Zero-shot Reasoning) Trainer for zero data training.
@@ -99,7 +119,7 @@ class AZRTrainer:
         non_clipped = unsqueezed_advantages * masked_importance_ratio  # shape: (role, task, minibatch_size, seq_len, )
         # compute the clipped objective
         clipped = unsqueezed_advantages.clamp(-self.args.clip_ratio,
-                                   self.args.clip_ratio) * masked_importance_ratio  # shape: (role, task, minibatch_size, seq_len,
+                                              self.args.clip_ratio) * masked_importance_ratio  # shape: (role, task, minibatch_size, seq_len,
 
         # Use attention masks for proper averaging - only count valid positions
         objective_per_position = torch.minimum(non_clipped, clipped)
@@ -159,35 +179,176 @@ class AZRTrainer:
             # write logprobs to the mega buffer
             # megabuffer.logprobs shape : (role task batch_size seq_len vocab_size)
             for idx, task_type in enumerate(TaskType):
+                print(f"\n[GRAD_DEBUG] ========== Processing {task_type.name} (idx={idx}) ==========")
+
                 match task_type:
                     case TaskType.ABDUCTION:
+                        print(f"[GRAD_DEBUG] BEFORE assignment - TaskType.ABDUCTION")
+
+                        # Debug input tensors
+                        debug_gradient_info(abduction_logprobs, "abduction_logprobs", "INPUT")
+                        debug_gradient_info(abduction_sample_ids, "abduction_sample_ids", "INPUT")
+                        debug_gradient_info(abduction_attention_mask, "abduction_attention_mask", "INPUT")
+
+                        # Debug target buffer slices BEFORE assignment
+                        target_logprobs_slice = self.mega_buffer.logprobs[
+                            Role.PROPOSER.value, task_type.value, batch_idx, ...]
+                        debug_gradient_info(target_logprobs_slice, "target_logprobs_slice_BEFORE", "BUFFER_BEFORE")
+
+                        # Debug reward
+                        print(f"[GRAD_DEBUG] abduction_answer.reward type: {type(abduction_answer.reward)}")
+                        if hasattr(abduction_answer.reward, 'requires_grad'):
+                            debug_gradient_info(abduction_answer.reward, "abduction_answer.reward", "REWARD_INPUT")
+                        else:
+                            print(f"[GRAD_DEBUG] abduction_answer.reward is not a tensor: {abduction_answer.reward}")
+
+                        # ORIGINAL ASSIGNMENTS WITH GRADIENT TRACKING
+                        print(f"[GRAD_DEBUG] Performing assignments...")
+
+                        # Assignment 1: logprobs
                         self.mega_buffer.logprobs[
                             Role.PROPOSER.value, task_type.value, batch_idx, ...] = abduction_logprobs
-                        # write the rewards to proposer_format_correctness_rewards
+                        target_logprobs_slice_after = self.mega_buffer.logprobs[
+                            Role.PROPOSER.value, task_type.value, batch_idx, ...]
+                        debug_gradient_info(target_logprobs_slice_after, "target_logprobs_slice_AFTER", "BUFFER_AFTER")
+
+                        # Assignment 2: rewards
+                        proposer_format_correctness_rewards_before = proposer_format_correctness_rewards[
+                            task_type.value, batch_idx].clone() if proposer_format_correctness_rewards[
+                            task_type.value, batch_idx].requires_grad else proposer_format_correctness_rewards[
+                            task_type.value, batch_idx]
+                        debug_gradient_info(proposer_format_correctness_rewards_before, "rewards_buffer_BEFORE",
+                                            "REWARDS_BEFORE")
+
                         proposer_format_correctness_rewards[task_type.value, batch_idx] = abduction_answer.reward
+
+                        debug_gradient_info(proposer_format_correctness_rewards[task_type.value, batch_idx],
+                                            "rewards_buffer_AFTER", "REWARDS_AFTER")
+
+                        # Assignment 3: sample_ids
                         self.mega_buffer.sample_ids[
                             Role.PROPOSER.value, task_type.value, batch_idx, ...] = abduction_sample_ids
+
+                        # Assignment 4: attention_masks
                         self.mega_buffer.attention_masks[
                             Role.PROPOSER.value, task_type.value, batch_idx, ...] = abduction_attention_mask
+
                     case TaskType.DEDUCTION:
+                        print(f"[GRAD_DEBUG] BEFORE assignment - TaskType.DEDUCTION")
+
+                        # Debug input tensors
+                        debug_gradient_info(deduction_logprobs, "deduction_logprobs", "INPUT")
+                        debug_gradient_info(deduction_sample_ids, "deduction_sample_ids", "INPUT")
+                        debug_gradient_info(deduction_attention_mask, "deduction_attention_mask", "INPUT")
+
+                        # Debug target buffer slices BEFORE assignment
+                        target_logprobs_slice = self.mega_buffer.logprobs[
+                            Role.PROPOSER.value, task_type.value, batch_idx, ...]
+                        debug_gradient_info(target_logprobs_slice, "target_logprobs_slice_BEFORE", "BUFFER_BEFORE")
+
+                        # Debug reward
+                        print(f"[GRAD_DEBUG] deduction_answer.reward type: {type(deduction_answer.reward)}")
+                        if hasattr(deduction_answer.reward, 'requires_grad'):
+                            debug_gradient_info(deduction_answer.reward, "deduction_answer.reward", "REWARD_INPUT")
+                        else:
+                            print(f"[GRAD_DEBUG] deduction_answer.reward is not a tensor: {deduction_answer.reward}")
+
+                        # ORIGINAL ASSIGNMENTS WITH GRADIENT TRACKING
+                        print(f"[GRAD_DEBUG] Performing assignments...")
+
+                        # Assignment 1: logprobs
                         self.mega_buffer.logprobs[
                             Role.PROPOSER.value, task_type.value, batch_idx, ...] = deduction_logprobs
+                        target_logprobs_slice_after = self.mega_buffer.logprobs[
+                            Role.PROPOSER.value, task_type.value, batch_idx, ...]
+                        debug_gradient_info(target_logprobs_slice_after, "target_logprobs_slice_AFTER", "BUFFER_AFTER")
+
+                        # Assignment 2: rewards
+                        proposer_format_correctness_rewards_before = proposer_format_correctness_rewards[
+                            task_type.value, batch_idx].clone() if proposer_format_correctness_rewards[
+                            task_type.value, batch_idx].requires_grad else proposer_format_correctness_rewards[
+                            task_type.value, batch_idx]
+                        debug_gradient_info(proposer_format_correctness_rewards_before, "rewards_buffer_BEFORE",
+                                            "REWARDS_BEFORE")
 
                         proposer_format_correctness_rewards[task_type.value, batch_idx] = deduction_answer.reward
+
+                        debug_gradient_info(proposer_format_correctness_rewards[task_type.value, batch_idx],
+                                            "rewards_buffer_AFTER", "REWARDS_AFTER")
+
+                        # Assignment 3: sample_ids
                         self.mega_buffer.sample_ids[
                             Role.PROPOSER.value, task_type.value, batch_idx, ...] = deduction_sample_ids
+
+                        # Assignment 4: attention_masks
                         self.mega_buffer.attention_masks[
                             Role.PROPOSER.value, task_type.value, batch_idx, ...] = deduction_attention_mask
+
                     case TaskType.INDUCTION:
+                        print(f"[GRAD_DEBUG] BEFORE assignment - TaskType.INDUCTION")
+
+                        # Debug input tensors
+                        debug_gradient_info(induction_logprobs, "induction_logprobs", "INPUT")
+                        debug_gradient_info(induction_sample_ids, "induction_sample_ids", "INPUT")
+                        debug_gradient_info(induction_attention_mask, "induction_attention_mask", "INPUT")
+
+                        # Debug target buffer slices BEFORE assignment
+                        target_logprobs_slice = self.mega_buffer.logprobs[
+                            Role.PROPOSER.value, task_type.value, batch_idx, ...]
+                        debug_gradient_info(target_logprobs_slice, "target_logprobs_slice_BEFORE", "BUFFER_BEFORE")
+
+                        # Debug induction answers and reward computation
+                        print(f"[GRAD_DEBUG] induction_answers length: {len(induction_answers)}")
+                        for i, answer in enumerate(induction_answers):
+                            print(f"[GRAD_DEBUG] induction_answers[{i}].reward type: {type(answer.reward)}")
+                            if hasattr(answer.reward, 'requires_grad'):
+                                debug_gradient_info(answer.reward, f"induction_answers[{i}].reward", "REWARD_INPUT")
+                            else:
+                                print(f"[GRAD_DEBUG] induction_answers[{i}].reward is not a tensor: {answer.reward}")
+
+                        # CRITICAL: Debug the reward computation that's likely breaking gradients
+                        print(f"[GRAD_DEBUG] Computing mean reward for induction...")
+
+                        # Original problematic line:
+                        original_reward_computation = torch.tensor([a.reward for a in induction_answers],
+                                                                   device=DEVICE).mean()
+                        debug_gradient_info(original_reward_computation, "original_reward_computation",
+                                            "REWARD_COMPUTATION")
+
+                        # ORIGINAL ASSIGNMENTS WITH GRADIENT TRACKING
+                        print(f"[GRAD_DEBUG] Performing assignments...")
+
+                        # Assignment 1: logprobs
                         self.mega_buffer.logprobs[
                             Role.PROPOSER.value, task_type.value, batch_idx, ...] = induction_logprobs
+                        target_logprobs_slice_after = self.mega_buffer.logprobs[
+                            Role.PROPOSER.value, task_type.value, batch_idx, ...]
+                        debug_gradient_info(target_logprobs_slice_after, "target_logprobs_slice_AFTER", "BUFFER_AFTER")
+
+                        # Assignment 2: rewards (the problematic one)
+                        proposer_format_correctness_rewards_before = proposer_format_correctness_rewards[
+                            task_type.value, batch_idx].clone() if proposer_format_correctness_rewards[
+                            task_type.value, batch_idx].requires_grad else proposer_format_correctness_rewards[
+                            task_type.value, batch_idx]
+                        debug_gradient_info(proposer_format_correctness_rewards_before, "rewards_buffer_BEFORE",
+                                            "REWARDS_BEFORE")
+
                         # TODO: maybe not mean??
                         proposer_format_correctness_rewards[task_type.value, batch_idx] = torch.tensor(
                             [a.reward for a in induction_answers], device=DEVICE).mean()
+
+                        debug_gradient_info(proposer_format_correctness_rewards[task_type.value, batch_idx],
+                                            "rewards_buffer_AFTER", "REWARDS_AFTER")
+
+                        # Assignment 3: sample_ids
                         self.mega_buffer.sample_ids[
                             Role.PROPOSER.value, task_type.value, batch_idx, ...] = induction_sample_ids
+
+                        # Assignment 4: attention_masks
                         self.mega_buffer.attention_masks[
                             Role.PROPOSER.value, task_type.value, batch_idx, ...] = induction_attention_mask
+
+                        print(f"[GRAD_DEBUG] ========== Finished {task_type.name} ==========\n")
 
         # SOLVE PROBLEMS
         for task_type in TaskType:
@@ -258,7 +419,8 @@ class AZRTrainer:
 
         # now do minibatch policy updates
         for index, mini_batch in enumerate(self.mega_buffer.get_minibatches(self.training_model, self.tokenizer)):
-            minibatch_all_rewards = all_rewards[:, :, index * self.args.minibatch_size:(index + 1) * self.args.minibatch_size]
+            minibatch_all_rewards = all_rewards[:, :,
+                                    index * self.args.minibatch_size:(index + 1) * self.args.minibatch_size]
 
             self.step += 1
             # first do a forward pass on current policy to get the logprobs used in importance ratio
@@ -275,7 +437,7 @@ class AZRTrainer:
                 (len(Role), len(TaskType), self.args.minibatch_size, self.args.max_response_length),
                 device=DEVICE, dtype=torch.int
             )
-            
+
             for role in Role:
                 prompts = [problem.get_prompt(role) for problem in mini_batch.samples]
                 _, logprobs, sample_ids, _, attention_masks = generate_response_bulk(
