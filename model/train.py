@@ -33,7 +33,29 @@ if __name__ == "__main__":
         lr=args.lr,  # do we want to set beta?
     )
 
-    mega_buffer = MegaBuffer()
+    mega_buffer = MegaBuffer(
+        args=args,
+        logprobs=torch.empty(
+            (
+                len(args.roles),
+                len(args.task_types),
+                args.batch_size,
+                args.max_response_length,
+                args.d_vocab,
+            ),
+            dtype=torch.Float,
+        ),
+        sample_ids=torch.empty(
+            (
+                len(args.roles),
+                len(args.task_types),
+                args.batch_size,
+                args.max_response_length,
+            ),
+            dtype=torch.int,
+        ),
+    )
+    mega_buffer.initialize_seed_buffer(tokenizer)
 
     trainer = AZRTrainer(
         args=args,
