@@ -104,10 +104,10 @@ class AZRTrainer:
         Returns:
             BaseBuffer: BaseBuffer containing rollout data for the learning phase.
         """
-        # 
         proposer_format_correctness_rewards = torch.tensor((len(TaskType), self.args.train_batch_size), device=DEVICE)
         all_rewards = torch.tensor((len(TaskType), self.args.train_batch_size), device=DEVICE)
         self.step += 1
+
         for batch_idx in range(self.args.train_batch_size):
             induction_sample: PrimeSample = self.mega_buffer.sample_from_buffer(num_to_sample=1)[0]
 
@@ -124,7 +124,7 @@ class AZRTrainer:
             abduction_response, abduction_logprobs, abduction_sample_ids = self.propose_task(TaskType.ABDUCTION)
             deduction_response, deduction_logprobs, deduction_sample_ids = self.propose_task(TaskType.DEDUCTION)
 
-            # validate the responses have correct formatting, and run,  create answer objects during this proccess 
+            # validate the responses have correct formatting, and run,  create answer objects during this proccess
             abduction_answer = validate_proposer_formatting_and_correctness(abduction_response, TaskType.ABDUCTION)
             deduction_answer = validate_proposer_formatting_and_correctness(deduction_response, TaskType.DEDUCTION)
 
@@ -223,6 +223,7 @@ class AZRTrainer:
 
         self.mega_buffer.reset()
         all_rewards = self.rollout_phase()
+
         # now do minibatch policy updates
         for mini_batch in self.mega_buffer.get_minibatches(self.args):
             # first do a forward pass on current policy to get the logprobs used in importance ratio

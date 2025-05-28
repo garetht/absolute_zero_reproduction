@@ -18,10 +18,11 @@ if __name__ == "__main__":
         use_wandb=use_wandb,
         run_name=run_name,
     )
-    model = AutoModelForCausalLM.from_pretrained(MODEL_NAME)
+    model = AutoModelForCausalLM.from_pretrained(MODEL_NAME, device_map=DEVICE)
 
     tokenizer = AutoTokenizer.from_pretrained(
         MODEL_NAME,
+        device_map=DEVICE,
         padding_side="left",
     )
     # Set up tokenizer eos
@@ -30,7 +31,7 @@ if __name__ == "__main__":
 
     optimizer = torch.optim.AdamW(
         model.parameters(),
-        lr=args.lr,  # do we want to set beta?
+        lr=args.lr,  #   do we want to set beta?
     )
 
     mega_buffer = MegaBuffer(
