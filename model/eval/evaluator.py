@@ -10,6 +10,7 @@ from typing import List, Dict, Any, Optional
 from custom_types import ProblemResult, Problem, EvaluationResults
 from model.eval.prime_inversion import is_prime
 from model.eval.prompts import create_prompt
+from utils.string_formatting import extract_boxed_number
 
 
 class Evaluator:
@@ -70,7 +71,7 @@ class Evaluator:
         model_response = response[len(prompt):]
 
         # Extract answer
-        extracted_answer = self.extract_boxed_number(model_response)
+        extracted_answer = extract_boxed_number(model_response)
         correct_answer = problem.x if problem.blank == 'x' else problem.y
 
         # Compare answers (considering modulo)
@@ -118,23 +119,6 @@ class Evaluator:
         print(f"   • Total evaluation time: {total_eval_time:.1f}s")
         print(f"   • Average time per problem: {total_eval_time / num_problems:.2f}s")
 
-    @staticmethod
-    def extract_boxed_number(text: str) -> Optional[int]:
-        """
-        Extract a number from LaTeX \\boxed{} notation in the given text.
-
-        Args:
-            text: The text to search for boxed numbers
-
-        Returns:
-            The integer found within \\boxed{} notation, or None if no match is found
-        """
-        # Regex pattern to match \boxed{<number>} and extract the number
-        regexp_match = re.search(r"\\boxed\{([+-]?\d+)\}", text)
-        if regexp_match:
-            return int(regexp_match.group(1))
-        else:
-            return None
 
     def evaluate(self, problems: List[Problem], eval_start_time: float = None) -> EvaluationResults:
         """Run evaluation on the given problems."""

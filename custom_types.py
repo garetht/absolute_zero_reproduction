@@ -13,9 +13,9 @@ Task type to list of tuples where tuple[0] is the model answer and tuple[1] is t
 
 @dataclass
 class Answer:
-    input: Optional[str]
-    program: str
-    output: Optional[str]
+    input: Optional[int]
+    program: Optional[int]
+    output: Optional[int]
     reward: float
 
 

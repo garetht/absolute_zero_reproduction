@@ -19,7 +19,7 @@ from model.inference import generate_response, generate_response_bulk, remove_dv
 from custom_types import MiniBatch, TaskType, Role, BaseSample, IOPair
 from utils.validate_by_executing import validate_by_executing_induction
 from utils.string_formatting import format_task_prompts, format_for_abduction, format_for_induction, \
-    format_sample_from_io_pairs, extract_io_pairs_from_string, validate_formatting_and_correctness, \
+    format_sample_from_io_pairs, extract_io_pairs_from_string, validate_proposer_formatting_and_correctness, \
     create_sample_from_answer
 
 
@@ -111,8 +111,8 @@ class AZRTrainer:
             deduction_response, deduction_logprobs, deduction_sample_ids = self.propose_task(TaskType.DEDUCTION)
 
             # validate the responses have correct formatting, and run,  create answer objects during this proccess 
-            abduction_answer = validate_formatting_and_correctness(abduction_response, TaskType.ABDUCTION)
-            deduction_answer = validate_formatting_and_correctness(deduction_response, TaskType.DEDUCTION)
+            abduction_answer = validate_proposer_formatting_and_correctness(abduction_response, TaskType.ABDUCTION)
+            deduction_answer = validate_proposer_formatting_and_correctness(deduction_response, TaskType.DEDUCTION)
 
 
 

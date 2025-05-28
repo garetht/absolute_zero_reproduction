@@ -76,6 +76,10 @@ def modular_inverse(a: int, p: int) -> int:
     return pow(a, p - 2, p)
 
 
+def validate_modular_inverse(x: int, y: int, p: int) -> bool:
+    return (x * y) % p == 1
+
+
 def generate_problems(n: int, primes: list[int], seed: int = 42) -> list[Problem]:
     """
     Generate a list of modular inverse problems for evaluation.
