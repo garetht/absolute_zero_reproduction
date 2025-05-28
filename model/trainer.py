@@ -11,7 +11,7 @@ from transformers import AutoModelForCausalLM
 from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
 from jaxtyping import Float, Int
 
-from buffer.base_buff import BaseBuffer, MegaBuffer, 
+from buffer.base_buff import BaseBuffer, MegaBuffer
 from model.args import AZRArgs
 from model.compute.advantages import compute_advantages
 from model.compute.reward import compute_r_total
