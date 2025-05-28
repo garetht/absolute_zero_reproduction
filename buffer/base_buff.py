@@ -5,7 +5,7 @@ import torch
 
 from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
 from model.args import AZRArgs
-from model.eval.prime_inversion import get_problems, PRIMES
+from model.eval.prime_inversion import generate_problems, PRIMES
 from custom_types import MiniBatch, Role, TaskType, BaseSample, PrimeSample
 
 
@@ -106,7 +106,7 @@ class MegaBuffer:
         """
         Initialize seed buffer with k (default 1) samples
         """
-        problems = get_problems(n=num_samples, primes=PRIMES, seed=self.args.seed)
+        problems = generate_problems(n=num_samples, primes=PRIMES, seed=self.args.seed)
         self.seed_buffer.extend(
             [
                 PrimeSample.from_problem(p, tokenizer, self.args.max_prompt_length)

@@ -40,6 +40,13 @@ def generate_response_bulk(
     Int[torch.Tensor, "batch_size prompt_len"],
     Int[torch.Tensor, "batch_size max_response_len"],
 ]:
+
+    print("=" * 80)
+    print("Preparing to call model with prompts: ")
+    for prompt in prompts:
+        print(prompt)
+        print('-' * 20)
+
     # Tokenize inputs with padding
     inputs = tokenizer(
         prompts,
@@ -65,7 +72,7 @@ def generate_response_bulk(
 
     # Decode responses
     responses = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-    
+
     # Create attention masks to identify valid (non-padded) positions
     # Find positions where we have actual generated tokens (not padding)
     attention_masks = (generated_ids != tokenizer.pad_token_id).int()
@@ -79,7 +86,12 @@ def generate_response_bulk(
         # Mask positions after first EOS (but keep the EOS token itself)
         post_eos_mask = (eos_cumsum <= 1).int()
         attention_masks = attention_masks * post_eos_mask
-    
+
+    print("Receiving responses from model")
+    for response in responses:
+        print(response)
+        print('-' * 40)
+
     # TODO confirm that we aren't off by 1 indexing into the logits here
     # logits are these shape: (max_response_length, batch_size, vocab_size_size) before transpose, so transpose to (batch_size, max_response_length, vocab_size_size)
     logits = torch.stack(outputs.scores, dim=0).transpose(0, 1)
