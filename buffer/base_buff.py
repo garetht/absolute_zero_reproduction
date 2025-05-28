@@ -1,4 +1,3 @@
-from dataclasses import dataclass
 
 from jaxtyping import Int
 import numpy
@@ -6,14 +5,8 @@ from torch import Tensor
 import torch
 from transformers import AutoModelForCausalLM
 
-from buffer.abduction import AbductionBuffer
-from buffer.deduction import DeductionBuffer
-from buffer.induction import InductionBuffer
 from model.args import AZRArgs
 from custom_types import MiniBatch, Role, TaskType, BaseSample
-
-
-
 
 
 class BaseBuffer:
@@ -32,21 +25,19 @@ class BaseBuffer:
     def sample_ids(self):
         return torch.cat([s.sample_ids for s in self.samples])
 
-    def sample(self) -> BaseSample:
-        pass
-
-    def extend(self, sample: BaseSample):
-        pass
-
-
-@dataclass
 class MegaBuffer:
-    seed_buffer: list[BaseSample]
-    logprobs: Int[Tensor, "role task batch_size max_response_len vocab_size"]
-    sample_ids: Int[Tensor, "role task batch_size max_response_len"]
-    # batch_size is the index of the sample in the buffer, same for any role task combo
-    buffer: list[BaseSample]
-
+    def __init__(
+        self,
+        seed_buffer: list[BaseSample],
+        logprobs: Int[Tensor, "role task batch_size max_response_len vocab_size"],
+        sample_ids: Int[Tensor, "role task batch_size max_response_len"],
+        buffer: list[BaseSample]
+    ):
+        self.seed_buffer = seed_buffer
+        self.logprobs = logprobs
+        self.sample_ids = sample_ids
+        # batch_size is the index of the sample in the buffer, same for any role task combo
+        self.buffer = buffer
 
     def get_minibatches(self, args:AZRArgs) -> list[MiniBatch]:
         # looks at the buffer from the current rollout, returns samples indexed using their position in the batch
@@ -64,29 +55,16 @@ class MegaBuffer:
             ))
         return out
 
+    def reset(self) -> None:
+        self.seed_buffer.extend(self.buffer)
+        self.buffer = []
+        self.logprobs = torch.zeros_like(self.logprobs)
+        self.sample_ids = torch.zeros_like(self.sample_ids)
 
-    def solver_sample_from_buffer(self, num_to_sample: int) -> list[BaseSample]:
-        indices = numpy.random.choice(len(self.seed_buffer), num_to_sample, replace=True)
-        return [self.seed_buffer[i] for i in indices]
+    @property
+    def combined_buffer(self):
+        return self.seed_buffer + self.buffer
 
-
-    def sample_abduction_deduction(self) -> BaseSample:
-        pass
-
-    def sample_abduction(self) -> BaseSample:
-        pass
-
-    def sample_deduction(self) -> BaseSample:
-        pass
-
-
-def get_samples(
-        model: AutoModelForCausalLM,
-        prompt: str,
-        batch_size: int,
-        gen_len: int,
-        temperature: float,
-        top_k: int,
-        prepend_bos: bool,
-) -> tuple[Int[Tensor, "batch seq_len"], list[BaseSample]]:
-    pass
+    def sample_from_buffer(self, num_to_sample: int) -> list[BaseSample]:
+        indices = numpy.random.choice(len(self.combined_buffer), num_to_sample, replace=True)
+        return [self.combined_buffer[i] for i in indices]

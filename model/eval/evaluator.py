@@ -11,6 +11,7 @@ from model.args import AZRArgs
 from model.eval.prime_inversion import is_prime
 from model.eval.prompts import create_prompt
 from model.inference import generate_response_bulk
+from utils.string_formatting import extract_boxed_number, create_solver_prompt
 
 
 class Evaluator:
@@ -36,11 +37,11 @@ class Evaluator:
         self.max_new_tokens = args.max_response_length
         self.args = args
 
-    def _process_batch(
-            self, batch_problems: List[Problem], batch_idx: int, total_batches: int
-    ) -> tuple[List[str], List[str], float]:
-        """Process a single batch of problems using generate_response_bulk."""
-        batch_prompts = [create_prompt(prob) for prob in batch_problems]
+    def _process_batch(self, batch_problems: List[Problem], batch_idx: int, total_batches: int) -> tuple[
+        torch.Tensor, List[str], float]:
+
+        """Process a single batch of problems."""
+        batch_prompts = [create_solver_prompt(prob) for prob in batch_problems]
 
         print(
             f"\n📦 Processing batch {batch_idx + 1}/{total_batches} "
@@ -137,23 +138,6 @@ class Evaluator:
         print(f"   • Total evaluation time: {total_eval_time:.1f}s")
         print(f"   • Average time per problem: {total_eval_time / num_problems:.2f}s")
 
-    @staticmethod
-    def extract_boxed_number(text: str) -> Optional[int]:
-        """
-        Extract a number from LaTeX \\boxed{} notation in the given text.
-
-        Args:
-            text: The text to search for boxed numbers
-
-        Returns:
-            The integer found within \\boxed{} notation, or None if no match is found
-        """
-        # Regex pattern to match \boxed{<number>} and extract the number
-        regexp_match = re.search(r"\\boxed\{([+-]?\d+)\}", text)
-        if regexp_match:
-            return int(regexp_match.group(1))
-        else:
-            return None
 
     def evaluate(
             self, problems: List[Problem], eval_start_time: float = None

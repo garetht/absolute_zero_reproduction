@@ -13,21 +13,25 @@ Task type to list of tuples where tuple[0] is the model answer and tuple[1] is t
 
 @dataclass
 class Answer:
-    input: Optional[str]
-    program: str
-    output: Optional[str]
+    input: Optional[int]
+    program: Optional[int]
+    output: Optional[int]
     reward: float
+
+    @property
+    def is_valid(self) -> bool:
+        return self.reward >= 0
 
 
 class TaskType(Enum):
-    DEDUCTION = "DEDUCTION"
-    ABDUCTION = "ABDUCTION"
-    INDUCTION = "INDUCTION"
+    DEDUCTION = 0
+    ABDUCTION = 1
+    INDUCTION = 2
 
 
 class Role(Enum):
-    SOLVER = "SOLVER"
-    PROPOSER = "PROPOSER"
+    SOLVER = 0
+    PROPOSER = 1
 
 
 T = TypeVar("T")
