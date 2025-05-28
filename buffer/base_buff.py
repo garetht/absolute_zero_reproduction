@@ -1,4 +1,3 @@
-from dataclasses import dataclass
 
 from jaxtyping import Int
 import numpy
@@ -6,14 +5,8 @@ from torch import Tensor
 import torch
 from transformers import AutoModelForCausalLM
 
-from buffer.abduction import AbductionBuffer
-from buffer.deduction import DeductionBuffer
-from buffer.induction import InductionBuffer
 from model.args import AZRArgs
 from custom_types import MiniBatch, Role, TaskType, BaseSample
-
-
-
 
 
 class BaseBuffer:
@@ -39,14 +32,19 @@ class BaseBuffer:
         pass
 
 
-@dataclass
 class MegaBuffer:
-    seed_buffer: list[BaseSample]
-    logprobs: Int[Tensor, "role task batch_size max_response_len vocab_size"]
-    sample_ids: Int[Tensor, "role task batch_size max_response_len"]
-    # batch_size is the index of the sample in the buffer, same for any role task combo
-    buffer: list[BaseSample]
-
+    def __init__(
+        self,
+        seed_buffer: list[BaseSample],
+        logprobs: Int[Tensor, "role task batch_size max_response_len vocab_size"],
+        sample_ids: Int[Tensor, "role task batch_size max_response_len"],
+        buffer: list[BaseSample]
+    ):
+        self.seed_buffer = seed_buffer
+        self.logprobs = logprobs
+        self.sample_ids = sample_ids
+        # batch_size is the index of the sample in the buffer, same for any role task combo
+        self.buffer = buffer
 
     def get_minibatches(self, args:AZRArgs) -> list[MiniBatch]:
         # looks at the buffer from the current rollout, returns samples indexed using their position in the batch
@@ -64,6 +62,8 @@ class MegaBuffer:
             ))
         return out
 
+    def reset(self) -> None:
+        self.buffer = []
 
     def solver_sample_from_buffer(self, num_to_sample: int) -> list[BaseSample]:
         indices = numpy.random.choice(len(self.seed_buffer), num_to_sample, replace=True)
