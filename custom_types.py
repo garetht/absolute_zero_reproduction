@@ -64,6 +64,7 @@ class PrimeSample(BaseSample):
 
     function_io: list[IOPair[int]]
 
+
 class ProblemResult(TypedDict):
     problem: str
     extracted_answer: Optional[int]
