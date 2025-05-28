@@ -39,7 +39,8 @@ def main():
 
     optimizer = torch.optim.AdamW(
         model.parameters(),
-        lr=args.lr,  # do we want to set beta?
+        lr=args.lr,  # do we want to set beta?,
+        maximize=True,  # We want to maximize the reward, not minimize the loss
     )
 
 

@@ -125,6 +125,73 @@ def generate_response_bulk(
     return responses, logprobs, generated_ids, inputs.input_ids, attention_masks
 
 
+def compute_logprobs_for_tokens(
+    model: AutoModelForCausalLM,
+    tokenizer: PreTrainedTokenizerFast,
+    prompts: list[str],
+    tokens: Int[torch.Tensor, "batch_size max_response_len"],
+    attention_masks: Int[torch.Tensor, "batch_size max_response_len"],
+) -> Float[torch.Tensor, "batch_size max_response_len vocab_size"]:
+    """
+    Compute logprobs for given tokens with gradients enabled.
+    This is used during training to get gradients through the policy.
+    
+    Args:
+        model: The language model
+        tokenizer: Tokenizer
+        prompts: List of prompt strings
+        tokens: Generated tokens from rollout phase
+        attention_masks: Attention masks for valid positions
+        
+    Returns:
+        logprobs with gradients enabled
+    """
+    # Tokenize prompts
+    inputs = tokenizer(
+        prompts,
+        padding=True,
+        truncation=True,
+        return_tensors="pt",
+    )
+    
+    # Create full sequence: prompt + generated tokens
+    prompt_ids = inputs.input_ids.to(DEVICE)
+    
+    # Concatenate prompt and generated tokens
+    full_sequence = torch.cat([prompt_ids, tokens], dim=1)
+    
+    # Create attention mask for full sequence
+    prompt_attention = inputs.attention_mask.to(DEVICE)
+    full_attention_mask = torch.cat([prompt_attention, attention_masks], dim=1)
+    
+    # Forward pass WITH gradients
+    outputs = model(
+        input_ids=full_sequence,
+        attention_mask=full_attention_mask,
+    )
+    
+    # Extract logits for the generated portion only
+    logits = outputs.logits[:, prompt_ids.shape[1]:, :]  # Remove prompt portion
+    
+    # Ensure we have the right length
+    if logits.shape[1] != tokens.shape[1]:
+        # Pad or truncate to match expected length
+        if logits.shape[1] < tokens.shape[1]:
+            padding = torch.zeros(
+                (logits.shape[0], tokens.shape[1] - logits.shape[1], logits.shape[2]),
+                dtype=logits.dtype,
+                device=logits.device
+            )
+            logits = torch.cat([logits, padding], dim=1)
+        else:
+            logits = logits[:, :tokens.shape[1], :]
+    
+    # Convert to log probabilities
+    logprobs = torch.log_softmax(logits, dim=-1)
+    
+    return logprobs
+
+
 def remove_dvocab_from_logprobs(
         logprobs: Float[torch.Tensor, "role task batch_size max_response_len vocab_size"],
         tokens: Int[torch.Tensor, "role task batch_size max_response_len"],

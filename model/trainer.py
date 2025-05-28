@@ -17,7 +17,7 @@ from custom_types import MiniBatch, TaskType, Role, IOPair, Answer, Problem
 from model.args import AZRArgs
 from model.compute.advantages import compute_advantages
 from model.compute.reward import compute_r_total
-from model.inference import generate_response, generate_response_bulk, remove_dvocab_from_logprobs
+from model.inference import generate_response, generate_response_bulk, remove_dvocab_from_logprobs, compute_logprobs_for_tokens
 from model.eval.baselines import run_baseline_evaluation_prime_samples
 from utils.string_formatting import validate_proposer_formatting_and_correctness, \
     create_problem_from_answer, validate_single_response, CHECK_MAP
@@ -74,6 +74,11 @@ class AZRTrainer:
         self.mega_buffer = mega_buffer
         self.step = 0
         self.run_name = run_name
+        
+        # Ensure model is in training mode and has gradients enabled
+        self.training_model.train()
+        for param in self.training_model.parameters():
+            param.requires_grad_(True)
 
     def compute_azr_objective(self, advantages: Float[torch.Tensor, "role task minibatch_size"],
                               new_logprobs: Float[torch.Tensor, "role task minibatch_size seq_len"],
@@ -261,35 +266,57 @@ class AZRTrainer:
             minibatch_all_rewards = all_rewards[:, :, index * self.args.minibatch_size:(index + 1) * self.args.minibatch_size]
 
             self.step += 1
-            # first do a forward pass on current policy to get the logprobs used in importance ratio
-            # generate for both roles since loss uses both proposer and solver logprobs
-            new_logprobs = torch.zeros(
-                (len(Role), len(TaskType), self.args.minibatch_size, self.args.max_response_length, self.args.d_vocab),
-                device=DEVICE, dtype=self.args.dtype
-            )
-            new_sample_ids = torch.zeros(
-                (len(Role), len(TaskType), self.args.minibatch_size, self.args.max_response_length),
-                device=DEVICE, dtype=torch.int
-            )
-            new_attention_masks = torch.zeros(
-                (len(Role), len(TaskType), self.args.minibatch_size, self.args.max_response_length),
-                device=DEVICE, dtype=torch.int
-            )
+            # Simplified approach: compute logprobs for actual problems and extract what we need
             
+            # For each role, compute new logprobs with gradients  
+            role_task_logprobs = {}
             for role in Role:
                 prompts = [problem.get_prompt(role) for problem in mini_batch.samples]
-                _, logprobs, sample_ids, _, attention_masks = generate_response_bulk(
-                    self.args, self.training_model, self.tokenizer, prompts
-                )
-                # Fill tensor for this role across all task types (but only the problem's specific task type matters)
+                
+                # Get actual tokens for each problem (using their specific task type)
+                actual_tokens = []
+                actual_masks = []
                 for mb_idx, problem in enumerate(mini_batch.samples):
-                    new_logprobs[role.value, problem.task_type.value, mb_idx] = logprobs[mb_idx]
-                    new_sample_ids[role.value, problem.task_type.value, mb_idx] = sample_ids[mb_idx]
-                    new_attention_masks[role.value, problem.task_type.value, mb_idx] = attention_masks[mb_idx]
-            new_logprobs = remove_dvocab_from_logprobs(new_logprobs, new_sample_ids)
+                    actual_tokens.append(mini_batch.sample_ids[role.value, problem.task_type.value, mb_idx])
+                    actual_masks.append(mini_batch.attention_masks[role.value, problem.task_type.value, mb_idx])
+                
+                actual_tokens = torch.stack(actual_tokens)  # (minibatch_size, seq_len)
+                actual_masks = torch.stack(actual_masks)    # (minibatch_size, seq_len)
+                
+                # Compute logprobs with gradients for this role
+                role_logprobs = compute_logprobs_for_tokens(
+                    self.training_model, self.tokenizer, prompts, actual_tokens, actual_masks
+                )  # (minibatch_size, seq_len, vocab_size)
+                
+                role_task_logprobs[role] = role_logprobs
+            
+            # Extract logprobs for each token and create the final tensor
+            new_logprobs_list = []
+            for mb_idx, problem in enumerate(mini_batch.samples):
+                problem_logprobs = []
+                for role in Role:
+                    # Get the logprobs for this problem and role
+                    role_logprobs = role_task_logprobs[role][mb_idx]  # (seq_len, vocab_size)
+                    # Extract logprobs for the actual tokens generated
+                    tokens = mini_batch.sample_ids[role.value, problem.task_type.value, mb_idx]  # (seq_len,)
+                    token_logprobs = torch.gather(role_logprobs, dim=-1, index=tokens.unsqueeze(-1).to(torch.int64)).squeeze(-1)  # (seq_len,)
+                    problem_logprobs.append(token_logprobs)
+                new_logprobs_list.append(torch.stack(problem_logprobs))  # (role, seq_len)
+            
+            new_logprobs = torch.stack(new_logprobs_list).transpose(0, 1)  # (role, minibatch_size, seq_len)
+            
+            new_logprobs = remove_dvocab_from_logprobs(new_logprobs, mini_batch.sample_ids)
+            print(f"new_logprobs.requires_grad: {new_logprobs.requires_grad}")
+            print(f"new_logprobs.grad_fn: {new_logprobs.grad_fn}")
+            
             advantages = compute_advantages(self.args, minibatch_all_rewards)  # shape role task minibatch_size
-            objective = self.compute_azr_objective(advantages, new_logprobs, new_sample_ids,
+            print(f"advantages.requires_grad: {advantages.requires_grad}")
+            
+            objective = self.compute_azr_objective(advantages, new_logprobs, mini_batch.sample_ids,
                                                    mini_batch)
+            print(f"objective.requires_grad: {objective.requires_grad}")
+            print(f"objective.grad_fn: {objective.grad_fn}")
+            
             self.optimizer.zero_grad()
             objective.backward()
             torch.nn.utils.clip_grad_norm_(self.training_model.parameters(), self.args.max_grad_norm)
