@@ -141,46 +141,96 @@ def check_types(parsed: object, expect_types: dict[str, bool]) -> bool:
     return True
 
 
+CHECK_MAP = {
+    TaskType.ABDUCTION: {
+        "expect_types": {"x": False, "y": True, "p": True},
+        "logic": lambda parsed: len(solve_modular_inverse(y=parsed.y, p=parsed.p)) == 1,
+        "make_answer": lambda parsed: Answer(input=None, program=parsed.p, output=parsed.y, reward=0.0)
+    },
+    TaskType.DEDUCTION: {
+        "expect_types": {"y": False, "x": True, "p": True},
+        "logic": lambda parsed: len(solve_modular_inverse(x=parsed.x, p=parsed.p)) == 1,
+        "make_answer": lambda parsed: Answer(input=parsed.x, program=parsed.p, output=None, reward=0.0)
+    },
+    TaskType.INDUCTION: {
+        "expect_types": {"p": False, "x": True, "y": True},
+        "logic": lambda parsed: len(solve_modular_inverse(x=parsed.x, y=parsed.y)) > 0,
+        "make_answer": lambda parsed: Answer(input=parsed.x, program=None, output=parsed.y, reward=0.0)
+    }
+}
+
 def validate_proposer_formatting_and_correctness_bulk(
         responses: list[str],
         task_type: TaskType
 ) -> list[Answer]:
-    answers = []
+    """
+    Validate multiple responses for a given task type.
 
+    Args:
+        responses: List of response strings to validate
+        task_type: The type of task (ABDUCTION, DEDUCTION, or INDUCTION)
+
+    Returns:
+        List of Answer objects corresponding to each response
+    """
     # Define validation functions per task for generalization:
-    check_map = {
-        TaskType.ABDUCTION: {
-            "expect_types": {"x": False, "y": True, "p": True},
-            "logic": lambda parsed: len(solve_modular_inverse(y=parsed.y, p=parsed.p)) == 1,
-            "make_answer": lambda parsed: Answer(input=None, program=parsed.p, output=parsed.y, reward=0.0)
-        },
-        TaskType.DEDUCTION: {
-            "expect_types": {"y": False, "x": True, "p": True},
-            "logic": lambda parsed: len(solve_modular_inverse(x=parsed.x, p=parsed.p)) == 1,
-            "make_answer": lambda parsed: Answer(input=parsed.x, program=parsed.p, output=None, reward=0.0)
-        },
-        TaskType.INDUCTION: {
-            "expect_types": {"p": False, "x": True, "y": True},
-            "logic": lambda parsed: len(solve_modular_inverse(x=parsed.x, y=parsed.y)) > 0,
-            "make_answer": lambda parsed: Answer(input=parsed.x, program=None, output=parsed.y, reward=0.0)
-        }
-    }
 
-    config = check_map[task_type]
+
+    config = CHECK_MAP[task_type]
+
+    # Process all responses using the extracted function
+    return validate_responses(responses, config)
+
+
+def validate_responses(responses: list[str], config: dict) -> list[Answer]:
+    """
+    Validate a list of responses using the provided configuration.
+
+    Args:
+        responses: List of response strings to validate
+        config: Dictionary containing validation configuration with keys:
+            - expect_types: Expected types for x, y, p
+            - logic: Function to validate the logic/solution
+            - make_answer: Function to create Answer object
+
+    Returns:
+        List of Answer objects
+    """
+    all_answers = []
 
     for response in responses:
-        parsed_response = extract_modular_equations(response)
+        answers = validate_single_response(response, config)
+        all_answers.extend(answers)
+
+    return all_answers
+
+
+def validate_single_response(response: str, config: dict) -> list[Answer]:
+    """
+    Validate a single response using the provided configuration.
+
+    Args:
+        response: Response string to validate
+        config: Dictionary containing validation configuration
+
+    Returns:
+        Answer object (or INVALID_FORMATTING/INCORRECT_ANSWER on failure)
+    """
+    parsed_responses = extract_modular_equations(response)
+    answers = []
+    for response in parsed_responses:
         # 1. Check types
-        if not check_types(parsed_response, config['expect_types']):
+        if not check_types(response, config['expect_types']):
             answers.append(INVALID_FORMATTING)
             continue
-        # 2. Logic/solution check
-        if not config['logic'](parsed_response):
-            answers.append(INCORRECT_ANSWER)
-            continue
-        # 3. Success
-        answers.append(config['make_answer'](parsed_response))
 
+        # 2. Logic/solution check
+        if not config['logic'](response):
+            answers.append(INVALID_FORMATTING)
+            continue
+
+        answers.append(config['make_answer'](response))
+    # 3. Success
     return answers
 
 
@@ -188,7 +238,7 @@ def create_sample_from_answer(answer: Answer, task_type: TaskType) -> BaseSample
     pass
 
 
-def validate_solver_formatting_and_correctness(response: str, task_type: str, sample: PrimeSample) -> Answer:
+def validate_solver_formatting_and_correctness(response: str, task_type: TaskType, sample: PrimeSample) -> Answer:
     parsed_number = extract_boxed_number(response)
     if parsed_number is None:
         return INVALID_FORMATTING

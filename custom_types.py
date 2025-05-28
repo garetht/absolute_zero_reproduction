@@ -18,6 +18,10 @@ class Answer:
     output: Optional[int]
     reward: float
 
+    @property
+    def is_valid(self) -> bool:
+        return self.reward >= 0
+
 
 class TaskType(Enum):
     DEDUCTION = 0

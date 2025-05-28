@@ -5,21 +5,19 @@ This module contains the AZRTrainer class and related utilities for training
 language models using the AZR methodology. It provides functionality for
 rollout phases, learning phases, and objective computation.
 """
-
 import torch
 from jaxtyping import Float, Int
 from transformers import AutoModelForCausalLM
 from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
 
 from buffer.base_buff import BaseBuffer, MegaBuffer
-from custom_types import MiniBatch, TaskType, Role, IOPair, PrimeSample
+from custom_types import MiniBatch, TaskType, Role, IOPair, PrimeSample, Answer
 from model.args import AZRArgs
 from model.compute.advantages import compute_advantages
 from model.compute.reward import compute_r_total
 from model.inference import generate_response, generate_response_bulk, remove_dvocab_from_logprobs
 from utils.string_formatting import validate_proposer_formatting_and_correctness, \
-    create_sample_from_answer, format_as_string, extract_modular_equations
-from utils.validate_by_executing import validate_by_executing_induction
+    create_sample_from_answer, format_as_string, validate_single_response, CHECK_MAP
 
 
 def format_sample_from_io_pairs(program: int, prompt_tokens: Int[torch.Tensor, "max_prompt_len"],
@@ -38,7 +36,7 @@ class AZRTrainer:
 
     Attributes:
         training_model (AutoModelForCausalLM): The model being trained.
-        megabuffer (object): Buffer for storing rollout data.
+        mega_buffer (object): Buffer for storing rollout data.
         step (int): Current training step counter.
         args (AZRArgs): Training configuration arguments.
         optimizer (torch.optim.Optimizer): Optimizer for model parameters.
@@ -113,11 +111,9 @@ class AZRTrainer:
             induction_sample: PrimeSample = self.mega_buffer.sample_from_buffer(num_to_sample=1)[0]
 
             # INDUCTION
-            io_pairs, induction_logprobs, induction_sample_ids, induction_prompt_tokens = self.generate_io_pairs(
+            valid_pairs, induction_logprobs, induction_sample_ids, induction_prompt_tokens, induction_answers = self.generate_and_validate_io_pairs(
                 induction_sample,
                 self.args.n_samples_to_estimate_task_accuracy)
-
-            valid_pairs, induct_proposer_format_reward = validate_by_executing_induction(io_pairs)
 
             sample = format_sample_from_io_pairs(induction_sample.prime, induction_prompt_tokens,
                                                  [io for io in valid_pairs])
@@ -162,13 +158,15 @@ class AZRTrainer:
                     case TaskType.INDUCTION:
                         self.mega_buffer.logprobs[
                             Role.PROPOSER.value, task_type.value, batch_idx, ...] = induction_logprobs
-                        proposer_format_correctness_rewards[task_type.value, batch_idx] = induct_proposer_format_reward
+                        # TODO: maybe not mean??
+                        proposer_format_correctness_rewards[task_type.value, batch_idx] = torch.tensor(
+                            [a.reward for a in induction_answers]).mean()
                         self.mega_buffer.sample_ids[
                             Role.PROPOSER.value, task_type.value, batch_idx, ...] = induction_sample_ids
 
         # SOLVE PROBLEMS
         for task_type in TaskType:
-            samples: list[PrimeSample] = self.mega_buffer.sample_from_buffer(self.args.train_batch_size, Role)
+            samples: list[PrimeSample] = self.mega_buffer.sample_from_buffer(num_to_sample=self.args.train_batch_size)
             task_prompts = [format_as_string(s, task_type, Role.SOLVER) for s in samples]
             responses, logprobs, sample_ids, prompt_ids = generate_response_bulk(self.args, self.training_model,
                                                                                  self.tokenizer, task_prompts)
@@ -184,7 +182,8 @@ class AZRTrainer:
                 # we want to pass proposer_format rewards and samples, from which we can compute r_solve
                 # TODO - compute formatting rewards for the solver response before rtotal?
                 # ie convert response to answer objects (which store the formatting reward)
-                all_rewards[role.value][task_type.value] = compute_r_total(samples, responses, role, r_format_proposer)
+                all_rewards[role.value][task_type.value] = compute_r_total(samples, responses, role, task_type,
+                                                                           r_format_proposer)
 
         return all_rewards  # shape: (role, task, batch_size)
 
@@ -193,20 +192,23 @@ class AZRTrainer:
         sample = self.mega_buffer.sample_from_buffer(num_to_sample=1)[0]
         prompt = format_as_string(sample, task_type, Role.PROPOSER)
         response, logprobs, sample_ids, prompt_tokens = generate_response(self.args, self.training_model,
-                                                                          self.tokenizer, prompt)
+                                                    `                      self.tokenizer, prompt)
         sample.prompt_tokens = prompt_tokens
         return response, logprobs, sample_ids
 
-    def generate_io_pairs(self, program: PrimeSample, num_io_pairs: int) -> tuple[
+    def generate_and_validate_io_pairs(self, program: PrimeSample, num_io_pairs: int) -> tuple[
         list[IOPair], Float[torch.Tensor, "seq_len vocab_size"], Int[torch.Tensor, "seq_len"], Int[
-            torch.Tensor, "max_prompt_len"]]:
+            torch.Tensor, "max_prompt_len"], list[Answer]]:
         induction_prompt = format_as_string(program, TaskType.INDUCTION, Role.PROPOSER, num_io_pairs)
         response, logprobs, sample_ids, prompt_tokens = generate_response(self.args, self.training_model,
                                                                           self.tokenizer, induction_prompt)
-        modular_equations = extract_modular_equations(response)
-        io_pairs = [IOPair(input_str=e.x, output_str=e.y) for e in modular_equations]
+
+        answers = validate_single_response(response, CHECK_MAP[TaskType.INDUCTION])
+        valid_answers = [a for a in answers if a.is_valid]
+
+        io_pairs = [IOPair(input_str=e.input, output_str=e.output) for e in valid_answers]
         program.prompt_tokens = prompt_tokens
-        return io_pairs, logprobs, sample_ids, prompt_tokens
+        return io_pairs, logprobs, sample_ids, prompt_tokens, answers
 
     def learning_phase(self) -> None:
         """
