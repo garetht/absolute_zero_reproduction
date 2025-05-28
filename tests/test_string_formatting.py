@@ -104,7 +104,7 @@ class TestValidateFormattingAndCorrectnessBulk:
     def test_validate_formatting_and_correctness_bulk_invalid_formatting(self):
         responses = ["invalid equation format"]
         result = validate_proposer_formatting_and_correctness_bulk(responses, TaskType.ABDUCTION)
-        assert len(result) == 1
+        assert len(result) == 0
 
     def test_validate_formatting_and_correctness_bulk_multiple_responses(self):
         responses = ["3 * 5 ≡ 1 (mod 7)", "2 * 4 ≡ 1 (mod 7)"]

@@ -4,7 +4,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
 import wandb
 
-from constants import MODEL_NAME
+from constants import MODEL_NAME, DEVICE
 
 from buffer.base_buff import MegaBuffer
 
@@ -18,7 +18,7 @@ if __name__ == "__main__":
         use_wandb=use_wandb,
         run_name=run_name,
     )
-    model = AutoModelForCausalLM.from_pretrained(MODEL_NAME)
+    model = AutoModelForCausalLM.from_pretrained(MODEL_NAME, device_map=DEVICE)
 
     tokenizer = AutoTokenizer.from_pretrained(
         MODEL_NAME,
@@ -61,7 +61,8 @@ if __name__ == "__main__":
         args=args,
         mega_buffer=mega_buffer,
         tokenizer=tokenizer,
-        train_model=model,
+        training_model=model,
+        optimizer=optimizer,
         run_name=args.run_name,
     )
 

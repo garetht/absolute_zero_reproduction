@@ -152,10 +152,11 @@ def extract_boxed_number(text: str) -> Optional[int]:
 def format_as_string(sample: PrimeSample, task_type: TaskType, role: Role, num_io_pairs: Optional[int] = 0) -> str:
     match role:
         case Role.PROPOSER:
-            create_proposer_prompt(Problem.from_prime_sample(sample, task_type), num_io_pairs=num_io_pairs)
+            return create_proposer_prompt(Problem.from_prime_sample(sample, task_type), num_io_pairs=num_io_pairs)
         case Role.SOLVER:
-            create_solver_prompt(Problem.from_prime_sample(sample, task_type))
+            return create_solver_prompt(Problem.from_prime_sample(sample, task_type))
 
+    raise ValueError(f"unexpected role {role}")
 
 def validate_proposer_formatting_and_correctness(response: str, task_type: TaskType) -> Answer:
     return validate_proposer_formatting_and_correctness_bulk([response], task_type)[0]
@@ -265,6 +266,10 @@ def validate_single_response(response: str, config: dict) -> list[Answer]:
     """
     parsed_responses = extract_modular_equations(response)
     answers = []
+
+    if len(parsed_responses) == 0:
+        return [INVALID_FORMATTING]
+
     for response in parsed_responses:
         # 1. Check types
         if not check_types(response, config['expect_types']):
@@ -276,7 +281,14 @@ def validate_single_response(response: str, config: dict) -> list[Answer]:
             answers.append(INVALID_FORMATTING)
             continue
 
-        answers.append(config['make_answer'](response))
+        answer = config['make_answer'](response)
+        solutions = solve_modular_inverse(p=answer.program, x=answer.input, y=answer.output)
+
+        if len(solutions) == 0:
+            answers.append(INCORRECT_ANSWER)
+        else:
+            answers.append(answer)
+
     # 3. Success
     return answers
 

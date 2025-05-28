@@ -6,7 +6,7 @@ from model.eval.prime_inversion import solve_modular_inverse, generate_problems,
     "prob",
     generate_problems(100, PRIMES),
     ids=lambda p: (
-            f"solve_x_p{p.prime}_y{p.y}" if p.blank == 'x' else f"solve_y_p{p.prime}_x{p.x}" if p.blank == 'y' else f"solve_y{p.y}_p_x{p.x}"
+            f"solve_x_p{p.prime}_y{p.y} ({p.x})" if p.blank == 'x' else f"solve_y_p{p.prime}_x{p.x} ({p.y})" if p.blank == 'y' else f"solve_y{p.y}_p_x{p.x} ({p.prime})"
     )
 )
 def test_modular_inverse_problem(prob):
