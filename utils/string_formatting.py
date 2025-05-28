@@ -219,6 +219,10 @@ def validate_single_response(response: str, config: dict) -> list[Answer]:
     """
     parsed_responses = extract_modular_equations(response)
     answers = []
+
+    if len(parsed_responses) == 0:
+        return [INVALID_FORMATTING]
+
     for response in parsed_responses:
         # 1. Check types
         if not check_types(response, config['expect_types']):
@@ -230,7 +234,14 @@ def validate_single_response(response: str, config: dict) -> list[Answer]:
             answers.append(INVALID_FORMATTING)
             continue
 
-        answers.append(config['make_answer'](response))
+        answer = config['make_answer'](response)
+        solutions = solve_modular_inverse(p=answer.program, x=answer.input, y=answer.output)
+
+        if len(solutions) == 0:
+            answers.append(INCORRECT_ANSWER)
+        else:
+            answers.append(answer)
+
     # 3. Success
     return answers
 
