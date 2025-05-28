@@ -68,9 +68,10 @@ class MegaBuffer:
         self.logprobs = torch.zeros_like(self.logprobs)
         self.sample_ids = torch.zeros_like(self.sample_ids)
 
-    def solver_sample_from_buffer(self, num_to_sample: int) -> list[BaseSample]:
-        indices = numpy.random.choice(len(self.seed_buffer), num_to_sample, replace=True)
-        return [self.seed_buffer[i] for i in indices]
+    @property
+    def combined_buffer(self):
+        return self.seed_buffer + self.buffer
 
-    def sample(self) -> BaseSample:
-        pass
+    def sample_from_buffer(self, num_to_sample: int) -> list[BaseSample]:
+        indices = numpy.random.choice(len(self.combined_buffer), num_to_sample, replace=True)
+        return [self.combined_buffer[i] for i in indices]

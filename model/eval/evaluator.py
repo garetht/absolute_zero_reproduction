@@ -9,8 +9,7 @@ from typing import List, Dict, Any, Optional
 
 from custom_types import ProblemResult, Problem, EvaluationResults
 from model.eval.prime_inversion import is_prime
-from model.eval.prompts import create_prompt
-from utils.string_formatting import extract_boxed_number
+from utils.string_formatting import extract_boxed_number, create_solver_prompt
 
 
 class Evaluator:
@@ -37,7 +36,7 @@ class Evaluator:
         torch.Tensor, List[str], float]:
 
         """Process a single batch of problems."""
-        batch_prompts = [create_prompt(prob) for prob in batch_problems]
+        batch_prompts = [create_solver_prompt(prob) for prob in batch_problems]
 
         print(
             f"\n📦 Processing batch {batch_idx + 1}/{total_batches} "

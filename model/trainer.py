@@ -18,9 +18,9 @@ from model.compute.reward import compute_r_total
 from model.inference import generate_response, generate_response_bulk, remove_dvocab_from_logprobs
 from custom_types import MiniBatch, TaskType, Role, BaseSample, IOPair
 from utils.validate_by_executing import validate_by_executing_induction
-from utils.string_formatting import format_task_prompts, format_for_abduction, format_for_induction, \
+from utils.string_formatting import format_task_prompts, format_for_abduction_proposer, format_for_induction_proposer, \
     format_sample_from_io_pairs, extract_io_pairs_from_string, validate_proposer_formatting_and_correctness, \
-    create_sample_from_answer
+    create_sample_from_answer, format_for_deduction_proposer
 
 
 class AZRTrainer:
@@ -147,7 +147,7 @@ class AZRTrainer:
 
         # SOLVE PROBLEMS
         for task_type in TaskType:
-            samples: list[BaseSample] = self.mega_buffer.solver_sample_from_buffer(self.args.train_batch_size)
+            samples: list[BaseSample] = self.mega_buffer.sample_from_buffer(self.args.train_batch_size, Role)
             task_prompts = format_task_prompts(samples,task_type)
             responses, logprobs, sample_ids, prompt_ids = generate_response_bulk(self.args, self.training_model, self.tokenizer, task_prompts)
             # write logprobs to the mega buffer
@@ -171,9 +171,9 @@ class AZRTrainer:
         sample = self.mega_buffer.sample_abduction_deduction()
         match task_type:
             case TaskType.ABDUCTION:
-                prompt = format_for_abduction(sample)
+                prompt = format_for_abduction_proposer(sample)
             case TaskType.DEDUCTION:
-                prompt = format_for_induction(sample)
+                prompt = format_for_deduction_proposer(sample)
             case _:
                 raise ValueError(f"Unsupported task type in propose_task: {task_type}")
         response, logprobs, sample_ids, prompt_tokens = generate_response(self.args, self.training_model, self.tokenizer, prompt)
@@ -182,7 +182,7 @@ class AZRTrainer:
 
 
     def generate_io_pairs(self, program: BaseSample, num_io_pairs: int) -> tuple[list[IOPair], Float[torch.Tensor, "seq_len vocab_size"], Int[torch.Tensor, "seq_len"]]:
-        induction_prompt = format_for_induction(program, num_io_pairs)
+        induction_prompt = format_for_induction_proposer(program, num_io_pairs)
         response, logprobs, sample_ids, prompt_tokens = generate_response(self.args, self.training_model, self.tokenizer, induction_prompt)
         io_pairs = extract_io_pairs_from_string(response, num_io_pairs)
         program.prompt_tokens = prompt_tokens

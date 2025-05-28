@@ -2,7 +2,7 @@ import re
 
 from typing import Optional, Callable
 from dataclasses import dataclass
-from custom_types import BaseSample, TaskType, IOPair, Answer
+from custom_types import BaseSample, TaskType, IOPair, Answer, PrimeSample, Problem, Role
 from model.eval.prime_inversion import validate_modular_inverse, solve_modular_inverse
 
 BOXED_NUMBER = """
@@ -12,7 +12,7 @@ Provide your answer as a single boxed number within e.g. \[
 <|im_start|>assistant
 """
 
-ABDUCTION_PROMPT = """<|im_start|>user
+ABDUCTION_SOLVER_PROMPT = """<|im_start|>user
 Given a prime number p and an integer y, find x such that:
 
 x * {y} ≡ 1 (mod {prime})
@@ -20,7 +20,7 @@ x * {y} ≡ 1 (mod {prime})
 {boxed_number}
 """
 
-DEDUCTION_PROMPT = """<|im_start|>user
+DEDUCTION_SOLVER_PROMPT = """<|im_start|>user
 Given a prime number p and an integer x, find y such that:
 
 {x} * y ≡ 1 (mod {prime})
@@ -28,12 +28,24 @@ Given a prime number p and an integer x, find y such that:
 {boxed_number}
 """
 
-INDUCTION_PROMPT = """<|im_start|>user
+INDUCTION_SOLVER_PROMPT = """<|im_start|>user
 Given integers x and y, find a p such that:
 
 {x} * {y} ≡ 1 (mod p)
 
 {boxed_number}
+"""
+
+ABDUCTION_PROPOSER_PROMPT = """<|im_start|>user
+
+"""
+
+DEDUCTION_PROPOSER_PROMPT = """<|im_start|>user
+
+"""
+
+INDUCTION_PROPOSER_PROMPT = """<|im_start|>user
+
 """
 
 
@@ -93,28 +105,12 @@ def extract_boxed_number(text: str) -> Optional[int]:
         return None
 
 
-def format_for_induction(program: BaseSample, num_io_pairs: int) -> str:
-    pass
-
-
-def format_for_abduction(program: BaseSample) -> str:
-    pass
-
-
-def format_for_deduction(program: BaseSample) -> str:
-    pass
-
-
-def format_task_prompts(sample: list[BaseSample], task_type: TaskType) -> list[str]:
-    pass
-
-
-def format_sample_from_io_pairs(valid_pairs_and_rewards: list[IOPair]) -> BaseSample:
-    pass
-
-
-def extract_io_pairs_from_string(response: str, num_io_pairs: int) -> list[IOPair]:
-    pass
+def format_as_string(sample: PrimeSample, task_type: TaskType, role: Role, num_io_pairs: Optional[int] = 0) -> str:
+    match role:
+        case Role.PROPOSER:
+            create_proposer_prompt(Problem.from_prime_sample(sample, task_type), num_io_pairs=num_io_pairs)
+        case Role.SOLVER:
+            create_solver_prompt(Problem.from_prime_sample(sample, task_type))
 
 
 def validate_proposer_formatting_and_correctness(response: str, task_type: TaskType) -> Answer:
@@ -127,7 +123,6 @@ INVALID_FORMATTING = Answer(
     output=None,
     reward=-1.0
 )
-
 
 INCORRECT_ANSWER = Answer(
     input=None,
@@ -194,3 +189,69 @@ def validate_proposer_formatting_and_correctness_bulk(
 
 def create_sample_from_answer(answer: Answer, task_type: TaskType) -> BaseSample:
     pass
+
+
+def validate_solver_formatting_and_correctness(response: str, task_type: str, sample: PrimeSample) -> Answer:
+    parsed_number = extract_boxed_number(response)
+    if parsed_number is None:
+        return INVALID_FORMATTING
+
+    is_correct = False
+    match task_type:
+        case TaskType.ABDUCTION:
+            is_correct = parsed_number == sample.function_io[0].input_str
+        case TaskType.DEDUCTION:
+            is_correct = parsed_number == sample.function_io[0].output_str
+        case TaskType.INDUCTION:
+            is_correct = parsed_number == sample.prime
+
+    if is_correct:
+        return Answer(
+            input=sample.function_io[0].input_str,
+            output=sample.function_io[0].output_str,
+            program=sample.prime,
+            reward=1.0
+        )
+    else:
+        return INCORRECT_ANSWER
+
+
+def create_proposer_prompt(problem: Problem, num_io_pairs: Optional[int] = None) -> str:
+    match problem.task_type:
+        case TaskType.ABDUCTION:
+            prompt = ABDUCTION_PROPOSER_PROMPT.format(y=problem.y, prime=problem.prime, boxed_number=BOXED_NUMBER)
+        case TaskType.DEDUCTION:
+            prompt = DEDUCTION_PROPOSER_PROMPT.format(x=problem.x, prime=problem.prime, boxed_number=BOXED_NUMBER)
+        case TaskType.INDUCTION:
+            prompt = INDUCTION_PROPOSER_PROMPT.format(x=problem.x, y=problem.y, boxed_number=BOXED_NUMBER,
+                                                      num_io_pairs=num_io_pairs)
+        case _:
+            raise ValueError(f"invalid blank value {problem.blank}")
+
+    return prompt
+
+
+def create_solver_prompt(problem: Problem) -> str:
+    """
+    Creates a formatted prompt string based on the problem configuration and which variable needs to be solved.
+
+    This function generates an appropriate prompt by selecting between two predefined templates
+    depending on whether the unknown variable is 'x' or 'y'. The prompt is formatted with the
+    known values from the problem instance.
+
+    :param problem: The problem instance containing the variable values and indicating which
+                    variable is unknown
+    :return: A formatted prompt string ready for use
+    :rtype: str
+    """
+    match problem.blank:
+        case "x":
+            prompt = ABDUCTION_SOLVER_PROMPT.format(y=problem.y, prime=problem.prime, boxed_number=BOXED_NUMBER)
+        case "y":
+            prompt = DEDUCTION_SOLVER_PROMPT.format(x=problem.x, prime=problem.prime, boxed_number=BOXED_NUMBER)
+        case "p":
+            prompt = INDUCTION_SOLVER_PROMPT.format(x=problem.x, y=problem.y, boxed_number=BOXED_NUMBER)
+        case _:
+            raise ValueError(f"invalid blank value {problem.blank}")
+
+    return prompt
