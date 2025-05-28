@@ -79,8 +79,6 @@ class Problem:
     x: int
     y: int
     task_type: TaskType
-    # For reproducible display
-    desc: str = field(default='')
 
     @property
     def blank(self) -> Literal['x', 'y', 'p']:

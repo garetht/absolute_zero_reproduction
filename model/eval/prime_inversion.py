@@ -27,10 +27,11 @@ def is_prime(n: int) -> bool:
     return True
 
 
-def solve_modular_inverse(p: int, x=None, y=None, verbose: bool = False):
+def solve_modular_inverse(p: int, x=None, y=None, verbose: bool = False) -> int:
     """
     Solves for the unknown in xy ≡ 1 mod p, where p is prime, and one of x or y is given.
 
+    TODO: add prime solving by checking in PRIMES
     Args:
         p (int): A prime modulus.
         x (int, optional): The value of x. If None, y must be given.

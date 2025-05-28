@@ -179,9 +179,6 @@ class Evaluator:
 
                 results["problem_results"].append(problem_result)
 
-                # Update progress bar description with current accuracy
-                current_accuracy = results["correct"] / len(results["problem_results"])
-
             # Print batch summary
             self._print_batch_summary(
                 batch_idx, batch_correct, len(batch_problems), results["no_response"],

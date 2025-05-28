@@ -3,7 +3,7 @@ import random
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from custom_types import PrimeSample, Problem, EvaluationResults
+from custom_types import PrimeSample, Problem, EvaluationResults, TaskType
 from model.eval.evaluator import evaluate_model_from_name, evaluate_model
 from model.eval.prime_inversion import generate_problems, PRIMES
 
@@ -29,7 +29,7 @@ def run_baseline_evaluation_prime_samples(model: AutoModelForCausalLM,
     """
     r = random.Random(seed)
     return evaluate_model(
-        model, tokenizer, [Problem.from_prime_sample(ps, r.choice(['x', 'y'])) for ps in prime_samples], max_new_tokens,
+        model, tokenizer, [Problem.from_prime_sample(ps, r.choice(list(TaskType))) for ps in prime_samples], max_new_tokens,
         batch_size
     )
 
