@@ -40,6 +40,13 @@ def generate_response_bulk(
     Int[torch.Tensor, "batch_size prompt_len"],
     Int[torch.Tensor, "batch_size max_response_len"],
 ]:
+
+    print("=" * 80)
+    print("Preparing to call model with prompts: ")
+    for prompt in prompts:
+        print(prompt)
+        print('-' * 20)
+
     # Tokenize inputs with padding
     inputs = tokenizer(
         prompts,
@@ -101,7 +108,10 @@ def generate_response_bulk(
     # logits are these shape: (actual_length, batch_size, vocab_size) before transpose
     logits = torch.stack(outputs.scores, dim=0).transpose(0, 1)  # (batch_size, actual_length, vocab_size)
     logprobs = torch.log_softmax(logits, dim=-1)
-    
+    print("Receiving responses from model")
+    for response in responses:
+        print(response)
+        print('-' * 40)
     # Pad logprobs to max_response_length if needed
     if actual_length < args.max_response_length:
         padding_length = args.max_response_length - actual_length

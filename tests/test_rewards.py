@@ -2,11 +2,12 @@ import pytest
 import torch
 from unittest.mock import Mock, patch
 from custom_types import Role, TaskType, Answer
+from model.args import AZRArgs
 from model.compute.reward import compute_r_propose, compute_r_total
 
+ARGS = AZRArgs()
 
 class TestComputeRPropose:
-    
     def test_compute_r_propose_basic(self):
         """Test basic r_propose computation."""
         # Test with average r_solve = 0.5
@@ -85,6 +86,7 @@ class TestComputeRTotal:
         r_proposer_format = torch.tensor([0.5, 0.8])
         
         result = compute_r_total(
+            ARGS,
             mock_samples,
             solver_responses, 
             Role.PROPOSER, 
@@ -108,6 +110,7 @@ class TestComputeRTotal:
         r_proposer_format = torch.tensor([-1.0, -2.0])
         
         result = compute_r_total(
+            ARGS,
             mock_samples,
             solver_responses,
             Role.PROPOSER,
@@ -131,6 +134,7 @@ class TestComputeRTotal:
         r_proposer_format = torch.tensor([0.0, 0.0, 0.0])  # Not used for solver
         
         result = compute_r_total(
+            ARGS,
             mock_samples,
             solver_responses,
             Role.SOLVER,
@@ -157,6 +161,7 @@ class TestComputeRTotal:
         r_proposer_format = torch.tensor([0.5, -1.0, 0.0, -2.0])
         
         result = compute_r_total(
+            ARGS,
             mock_samples,
             solver_responses,
             Role.PROPOSER,
@@ -182,6 +187,7 @@ class TestComputeRTotal:
         r_proposer_format = torch.tensor([0.5])
         
         result = compute_r_total(
+            ARGS,
             mock_samples,
             solver_responses,
             Role.SOLVER,

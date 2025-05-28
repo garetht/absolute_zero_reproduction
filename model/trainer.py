@@ -123,15 +123,17 @@ class AZRTrainer:
 
         for batch_idx in range(self.args.train_batch_size):
             induction_sample: PrimeSample = self.mega_buffer.sample_from_buffer(num_to_sample=1)[0]
+            print(induction_sample)
 
             # INDUCTION
             valid_pairs, induction_logprobs, induction_sample_ids, induction_prompt_tokens, induction_answers, induction_attention_mask = self.generate_and_validate_io_pairs(
                 induction_sample,
                 self.args.n_samples_to_estimate_task_accuracy)
 
-            sample = format_sample_from_io_pairs(induction_sample.prime, induction_prompt_tokens,
-                                                 [io for io in valid_pairs])
-            self.mega_buffer.buffer.append(sample)
+            if len(valid_pairs) > 0:
+                sample = format_sample_from_io_pairs(induction_sample.prime, induction_prompt_tokens,
+                                                     [io for io in valid_pairs])
+                self.mega_buffer.buffer.append(sample)
 
             # ABDUCTION and DEDUCTION
             abduction_response, abduction_logprobs, abduction_sample_ids, abduction_attention_mask = self.propose_task(TaskType.ABDUCTION)
@@ -203,7 +205,7 @@ class AZRTrainer:
                 # we want to pass proposer_format rewards and samples, from which we can compute r_solve
                 # TODO - compute formatting rewards for the solver response before rtotal?
                 # ie convert response to answer objects (which store the formatting reward)
-                all_rewards[role.value][task_type.value] = compute_r_total(samples, responses, role, task_type,
+                all_rewards[role.value][task_type.value] = compute_r_total(self.args, samples, responses, role, task_type,
                                                                            r_format_proposer)
 
         return all_rewards  # shape: (role, task, batch_size)
