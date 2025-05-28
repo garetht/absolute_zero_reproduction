@@ -44,6 +44,7 @@ if __name__ == "__main__":
                 args.d_vocab,
             ),
             dtype=torch.Float,
+            device=DEVICE,
         ),
         sample_ids=torch.empty(
             (
@@ -53,6 +54,7 @@ if __name__ == "__main__":
                 args.max_response_length,
             ),
             dtype=torch.int,
+            device=DEVICE,
         ),
     )
     mega_buffer.initialize_seed_buffer(tokenizer)

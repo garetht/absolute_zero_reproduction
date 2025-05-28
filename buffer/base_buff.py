@@ -78,8 +78,8 @@ class MegaBuffer:
     def reset(self) -> None:
         self.seed_buffer.extend(self.buffer)
         self.buffer = []
-        self.logprobs = torch.zeros_like(self.logprobs)
-        self.sample_ids = torch.zeros_like(self.sample_ids)
+        self.logprobs = torch.zeros_like(self.logprobs, device=self.logprobs.device)
+        self.sample_ids = torch.zeros_like(self.sample_ids, device=self.sample_ids.device)
 
     @property
     def combined_buffer(self):
