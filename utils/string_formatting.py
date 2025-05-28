@@ -145,11 +145,13 @@ class ModularEquation:
 
 def extract_modular_equations(text) -> list[ModularEquation]:
     """
-    Extract x, y, and p from modular equation: x * y ≡ 1 (mod p)
+    Extract x, y, and p from LaTeX modular equation format: \[x \times y \equiv 1 \pmod{p} \]
     Returns a list of ModularEquation objects for all matches found
     """
-    # Simplified regex pattern
-    pattern = r"(\w+) \* (\w+) ≡ 1 \(mod (\w+)\)"
+    # LaTeX format regex pattern: \[37 \times 69 \equiv 1 \pmod{421} \]
+    pattern = (
+        r"\\?\[\s*(\w+)\s*\\times\s*(\w+)\s*\\equiv\s*1\s*\\pmod\{\s*(\w+)\s*\}\s*\\?\]"
+    )
 
     re_matches = re.findall(pattern, text)
 
