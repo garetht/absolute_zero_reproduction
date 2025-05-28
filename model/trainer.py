@@ -117,9 +117,10 @@ class AZRTrainer:
                 induction_sample,
                 self.args.n_samples_to_estimate_task_accuracy)
 
-            sample = format_sample_from_io_pairs(induction_sample.prime, induction_prompt_tokens,
-                                                 [io for io in valid_pairs])
-            self.mega_buffer.buffer.append(sample)
+            if len(valid_pairs) > 0:
+                sample = format_sample_from_io_pairs(induction_sample.prime, induction_prompt_tokens,
+                                                     [io for io in valid_pairs])
+                self.mega_buffer.buffer.append(sample)
 
             # ABDUCTION and DEDUCTION
             abduction_response, abduction_logprobs, abduction_sample_ids = self.propose_task(TaskType.ABDUCTION)
