@@ -1,12 +1,15 @@
-
 from jaxtyping import Int
 import numpy
 from torch import Tensor
 import torch
-from transformers import AutoModelForCausalLM
 
+from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
 from model.args import AZRArgs
-from custom_types import MiniBatch, Role, TaskType, BaseSample
+from model.eval.prime_inversion import get_problems, PRIMES
+from custom_types import MiniBatch, Role, TaskType, BaseSample, PrimeSample
+
+
+from typing import Optional
 
 
 class BaseBuffer:
@@ -15,9 +18,9 @@ class BaseBuffer:
     """
 
     def __init__(
-            self,
-            args: AZRArgs,
-            samples: list[BaseSample],
+        self,
+        args: AZRArgs,
+        samples: list[BaseSample],
     ):
         self.args = args
         self.samples = samples
@@ -25,34 +28,56 @@ class BaseBuffer:
     def sample_ids(self):
         return torch.cat([s.sample_ids for s in self.samples])
 
+
 class MegaBuffer:
     def __init__(
         self,
+        args: AZRArgs,
         seed_buffer: list[BaseSample],
         logprobs: Int[Tensor, "role task batch_size max_response_len vocab_size"],
         sample_ids: Int[Tensor, "role task batch_size max_response_len"],
-        buffer: list[BaseSample]
+        buffer: list[BaseSample],
     ):
+        self.args = args
         self.seed_buffer = seed_buffer
         self.logprobs = logprobs
         self.sample_ids = sample_ids
         # batch_size is the index of the sample in the buffer, same for any role task combo
         self.buffer = buffer
 
-    def get_minibatches(self, args:AZRArgs) -> list[MiniBatch]:
+    def get_minibatches(self) -> list[MiniBatch]:
         # looks at the buffer from the current rollout, returns samples indexed using their position in the batch
         out = []
-        for indices in torch.randperm(args.batch_size).reshape(args.n_minibatches, -1):
+        for indices in torch.randperm(self.args.batch_size).reshape(
+            self.args.n_minibatches, -1
+        ):
             minibatch_samples = [self.buffer[i] for i in indices]
-            minibatch_sample_ids = self.sample_ids[:,:,indices]
-            assert minibatch_sample_ids.shape == (len(Role), len(TaskType), args.minibatch_size, args.max_response_length), "Sample ids should have shape  (len(Role), len(TaskType), args.minibatch_size, args.max_response_length)"
-            minibatch_logprobs = self.logprobs[:,:,indices]
-            assert minibatch_logprobs.shape == (len(Role), len(TaskType), args.minibatch_size, args.max_response_length, args.d_vocab), "Logprobs should have shape  (len(Role), len(TaskType), args.minibatch_size, args.max_response_length, args.vocab_size)"
-            out.append(MiniBatch(
-                samples=minibatch_samples,
-                sample_ids=minibatch_sample_ids,
-                logprobs=minibatch_logprobs
-            ))
+            minibatch_sample_ids = self.sample_ids[:, :, indices]
+            assert minibatch_sample_ids.shape == (
+                len(Role),
+                len(TaskType),
+                self.args.minibatch_size,
+                self.args.max_response_length,
+            ), (
+                "Sample ids should have shape  (len(Role), len(TaskType), args.minibatch_size, args.max_response_length)"
+            )
+            minibatch_logprobs = self.logprobs[:, :, indices]
+            assert minibatch_logprobs.shape == (
+                len(Role),
+                len(TaskType),
+                self.args.minibatch_size,
+                self.args.max_response_length,
+                self.args.d_vocab,
+            ), (
+                "Logprobs should have shape  (len(Role), len(TaskType), args.minibatch_size, args.max_response_length, args.vocab_size)"
+            )
+            out.append(
+                MiniBatch(
+                    samples=minibatch_samples,
+                    sample_ids=minibatch_sample_ids,
+                    logprobs=minibatch_logprobs,
+                )
+            )
         return out
 
     def reset(self) -> None:
@@ -66,5 +91,23 @@ class MegaBuffer:
         return self.seed_buffer + self.buffer
 
     def sample_from_buffer(self, num_to_sample: int) -> list[BaseSample]:
-        indices = numpy.random.choice(len(self.combined_buffer), num_to_sample, replace=True)
+        indices = numpy.random.choice(
+            len(self.combined_buffer), num_to_sample, replace=True
+        )
         return [self.combined_buffer[i] for i in indices]
+
+    def initialize_seed_buffer(
+        self, num_samples: Optional[int], tokenizer: PreTrainedTokenizerFast
+    ) -> None:
+        """
+        Initialize seed buffer with k (default 1) samples
+        """
+        num_samples = 1 if num_samples is None else num_samples
+
+        problems = get_problems(n=num_samples, primes=PRIMES, seed=self.args.seed)
+        self.seed_buffer.extend(
+            [
+                PrimeSample.from_problem(p, tokenizer, self.args.max_prompt_length)
+                for p in problems
+            ]
+        )
