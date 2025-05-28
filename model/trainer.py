@@ -191,8 +191,7 @@ class AZRTrainer:
         str, Float[torch.Tensor, "seq_len vocab_size"], Int[torch.Tensor, "seq_len"]]:
         sample = self.mega_buffer.sample_from_buffer(num_to_sample=1)[0]
         prompt = format_as_string(sample, task_type, Role.PROPOSER)
-        response, logprobs, sample_ids, prompt_tokens = generate_response(self.args, self.training_model,
-                                                    `                      self.tokenizer, prompt)
+        response, logprobs, sample_ids, prompt_tokens = generate_response(self.args, self.training_model, self.tokenizer, prompt)
         sample.prompt_tokens = prompt_tokens
         return response, logprobs, sample_ids
 
