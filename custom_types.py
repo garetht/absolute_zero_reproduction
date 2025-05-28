@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing_extensions import TypedDict
+from typing_extensions import TypedDict, Literal
 from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
 
 from typing import Generic, Optional, TypeVar
