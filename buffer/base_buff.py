@@ -42,8 +42,8 @@ class BaseBuffer:
 @dataclass
 class MegaBuffer:
     seed_buffer: list[BaseSample]
-    logprobs: Int[Tensor, "role task batch_size seq_len vocab_size"]
-    sample_ids: Int[Tensor, "role task batch_size seq_len "]
+    logprobs: Int[Tensor, "role task batch_size max_response_len vocab_size"]
+    sample_ids: Int[Tensor, "role task batch_size max_response_len"]
     # batch_size is the index of the sample in the buffer, same for any role task combo
     buffer: list[BaseSample]
 
