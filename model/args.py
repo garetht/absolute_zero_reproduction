@@ -1,10 +1,12 @@
 from dataclasses import dataclass
 
 import constants
-
+import torch
 
 @dataclass
 class AZRArgs:
+    dtype: torch.dtype = torch.bfloat16
+
     # Basic / global
     seed: int = constants.RANDOM_SEED
     run_name: str = "AZR-Run"

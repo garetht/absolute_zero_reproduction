@@ -183,7 +183,7 @@ class AZRTrainer:
                 # we want to pass proposer_format rewards and samples, from which we can compute r_solve
                 # TODO - compute formatting rewards for the solver response before rtotal?
                 # ie convert response to answer objects (which store the formatting reward)
-                all_rewards[role.value][task_type.value] = compute_r_total(samples, responses, role, task_type,
+                all_rewards[role.value][task_type.value] = compute_r_total(self.args, samples, responses, role, task_type,
                                                                            r_format_proposer)
 
         return all_rewards  # shape: (role, task, batch_size)
