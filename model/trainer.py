@@ -118,8 +118,8 @@ class AZRTrainer:
         Returns:
             BaseBuffer: BaseBuffer containing rollout data for the learning phase.
         """
-        proposer_format_correctness_rewards = torch.tensor((len(TaskType), self.args.train_batch_size), device=DEVICE)
-        all_rewards = torch.tensor((len(TaskType), self.args.train_batch_size), device=DEVICE)
+        proposer_format_correctness_rewards = torch.zeros((len(TaskType), self.args.train_batch_size), device=DEVICE)
+        all_rewards = torch.zeros((len(TaskType), self.args.train_batch_size), device=DEVICE)
 
         for batch_idx in range(self.args.train_batch_size):
             induction_sample: PrimeSample = self.mega_buffer.sample_from_buffer(num_to_sample=1)[0]
@@ -170,6 +170,7 @@ class AZRTrainer:
                     case TaskType.DEDUCTION:
                         self.mega_buffer.logprobs[
                             Role.PROPOSER.value, task_type.value, batch_idx, ...] = deduction_logprobs
+
                         proposer_format_correctness_rewards[task_type.value, batch_idx] = deduction_answer.reward
                         self.mega_buffer.sample_ids[
                             Role.PROPOSER.value, task_type.value, batch_idx, ...] = deduction_sample_ids
