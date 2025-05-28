@@ -1,3 +1,4 @@
+from custom_types import Role, TaskType
 from model.args import AZRArgs
 from model.trainer import AZRTrainer
 from transformers import AutoTokenizer, AutoModelForCausalLM
@@ -37,8 +38,8 @@ if __name__ == "__main__":
         args=args,
         logprobs=torch.empty(
             (
-                len(args.roles),
-                len(args.task_types),
+                len(Role),
+                len(TaskType),
                 args.batch_size,
                 args.max_response_length,
                 args.d_vocab,
@@ -47,8 +48,8 @@ if __name__ == "__main__":
         ),
         sample_ids=torch.empty(
             (
-                len(args.roles),
-                len(args.task_types),
+                len(Role),
+                len(TaskType),
                 args.batch_size,
                 args.max_response_length,
             ),
