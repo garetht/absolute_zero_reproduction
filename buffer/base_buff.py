@@ -63,6 +63,7 @@ class MegaBuffer:
         return out
 
     def reset(self) -> None:
+        self.seed_buffer.extend(self.buffer)
         self.buffer = []
         self.logprobs = torch.zeros_like(self.logprobs)
         self.sample_ids = torch.zeros_like(self.sample_ids)
@@ -71,24 +72,5 @@ class MegaBuffer:
         indices = numpy.random.choice(len(self.seed_buffer), num_to_sample, replace=True)
         return [self.seed_buffer[i] for i in indices]
 
-
-    def sample_abduction_deduction(self) -> BaseSample:
+    def sample(self) -> BaseSample:
         pass
-
-    def sample_abduction(self) -> BaseSample:
-        pass
-
-    def sample_deduction(self) -> BaseSample:
-        pass
-
-
-def get_samples(
-        model: AutoModelForCausalLM,
-        prompt: str,
-        batch_size: int,
-        gen_len: int,
-        temperature: float,
-        top_k: int,
-        prepend_bos: bool,
-) -> tuple[Int[Tensor, "batch seq_len"], list[BaseSample]]:
-    pass

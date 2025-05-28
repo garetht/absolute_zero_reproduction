@@ -118,7 +118,7 @@ def extract_io_pairs_from_string(response: str, num_io_pairs: int) -> list[IOPai
 
 
 def validate_proposer_formatting_and_correctness(response: str, task_type: TaskType) -> Answer:
-    return validate_formatting_and_correctness_bulk([response], task_type)[0]
+    return validate_proposer_formatting_and_correctness_bulk([response], task_type)[0]
 
 
 INVALID_FORMATTING = Answer(
@@ -149,7 +149,7 @@ def check_types(parsed: object, expect_types: dict[str, bool]) -> bool:
     return True
 
 
-def validate_formatting_and_correctness_bulk(
+def validate_proposer_formatting_and_correctness_bulk(
         responses: list[str],
         task_type: TaskType
 ) -> list[Answer]:

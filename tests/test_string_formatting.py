@@ -1,6 +1,6 @@
 import pytest
 from custom_types import TaskType, Answer
-from utils.string_formatting import extract_modular_equation, ModularEquation, validate_formatting_and_correctness_bulk
+from utils.string_formatting import extract_modular_equation, ModularEquation, validate_proposer_formatting_and_correctness_bulk
 
 
 class TestExtractModularEquation:
@@ -96,33 +96,33 @@ class TestExtractModularEquation:
 class TestValidateFormattingAndCorrectnessBulk:
     def test_validate_formatting_and_correctness_bulk_abduction_valid(self):
         responses = ["5 * 3 ≡ 1 (mod 7)"]
-        result = validate_formatting_and_correctness_bulk(responses, TaskType.ABDUCTION)
+        result = validate_proposer_formatting_and_correctness_bulk(responses, TaskType.ABDUCTION)
         assert len(result) == 1
         assert isinstance(result[0], Answer)
 
     def test_validate_formatting_and_correctness_bulk_deduction_valid(self):
         responses = ["3 * 5 ≡ 1 (mod 7)"]
-        result = validate_formatting_and_correctness_bulk(responses, TaskType.DEDUCTION)
+        result = validate_proposer_formatting_and_correctness_bulk(responses, TaskType.DEDUCTION)
         assert len(result) == 1
         assert isinstance(result[0], Answer)
 
     def test_validate_formatting_and_correctness_bulk_induction_valid(self):
         responses = ["3 * 5 ≡ 1 (mod 7)"]
-        result = validate_formatting_and_correctness_bulk(responses, TaskType.INDUCTION)
+        result = validate_proposer_formatting_and_correctness_bulk(responses, TaskType.INDUCTION)
         assert len(result) == 1
         assert isinstance(result[0], Answer)
 
     def test_validate_formatting_and_correctness_bulk_empty_responses(self):
         responses = []
-        result = validate_formatting_and_correctness_bulk(responses, TaskType.ABDUCTION)
+        result = validate_proposer_formatting_and_correctness_bulk(responses, TaskType.ABDUCTION)
         assert len(result) == 0
 
     def test_validate_formatting_and_correctness_bulk_invalid_formatting(self):
         responses = ["invalid equation format"]
-        result = validate_formatting_and_correctness_bulk(responses, TaskType.ABDUCTION)
+        result = validate_proposer_formatting_and_correctness_bulk(responses, TaskType.ABDUCTION)
         assert len(result) == 1
 
     def test_validate_formatting_and_correctness_bulk_multiple_responses(self):
         responses = ["3 * 5 ≡ 1 (mod 7)", "2 * 4 ≡ 1 (mod 7)"]
-        result = validate_formatting_and_correctness_bulk(responses, TaskType.ABDUCTION)
+        result = validate_proposer_formatting_and_correctness_bulk(responses, TaskType.ABDUCTION)
         assert len(result) == 2

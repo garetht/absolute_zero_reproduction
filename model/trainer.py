@@ -104,7 +104,7 @@ class AZRTrainer:
 
 
             sample = format_sample_from_io_pairs([io for io in valid_pairs])
-            self.mega_buffer.seed_buffer.append(sample)
+            self.mega_buffer.buffer.append(sample)
 
             # ABDUCTION and DEDUCTION
             abduction_response, abduction_logprobs, abduction_sample_ids = self.propose_task(TaskType.ABDUCTION)
@@ -119,12 +119,12 @@ class AZRTrainer:
             # if the abduction answer has valid formatting
             if abduction_answer.reward >= 0:
                 sample = create_sample_from_answer(abduction_answer, TaskType.ABDUCTION)
-                self.mega_buffer.seed_buffer.append(sample)
+                self.mega_buffer.buffer.append(sample)
 
             # if the deduction answer has valid formatting
             if deduction_answer.reward >= 0:
                 sample = create_sample_from_answer(deduction_answer, TaskType.DEDUCTION)
-                self.mega_buffer.seed_buffer.append(sample)
+                self.mega_buffer.buffer.append(sample)
 
             # BEFORE SOLVING, WRITE LOGPROBS TO THE MEGA BUFFER AND PARTIAL REWARDS TO OUR TENSOR
             # write logprobs to the mega buffer
