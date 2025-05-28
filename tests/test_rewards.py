@@ -2,6 +2,7 @@ import pytest
 import torch
 from unittest.mock import Mock, patch
 from custom_types import Role, TaskType, Answer
+from model.args import AZRArgs
 from model.compute.reward import compute_r_propose, compute_r_total
 
 ARGS = AZRArgs()

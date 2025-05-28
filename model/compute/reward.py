@@ -5,6 +5,7 @@ import torch
 
 from constants import DEVICE
 from custom_types import Role, TaskType, PrimeSample
+from model.args import AZRArgs
 from utils.string_formatting import validate_solver_formatting_and_correctness
 
 """

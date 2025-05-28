@@ -44,7 +44,7 @@ if __name__ == "__main__":
                 args.max_response_length,
                 args.d_vocab,
             ),
-            dtype=a,
+            dtype=torch.Float,
         ),
         sample_ids=torch.empty(
             (
