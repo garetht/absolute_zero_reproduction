@@ -68,7 +68,11 @@ def extract_modular_equation(text) -> Optional[ModularEquation]:
         )
         return result
     else:
-        return None
+        return ModularEquation(
+            x='',
+            y='',
+            p=''
+        )
 
 
 def extract_boxed_number(text: str) -> Optional[int]:
