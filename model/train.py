@@ -18,10 +18,11 @@ if __name__ == "__main__":
         use_wandb=use_wandb,
         run_name=run_name,
     )
-    model = AutoModelForCausalLM.from_pretrained(MODEL_NAME)
+    model = AutoModelForCausalLM.from_pretrained(MODEL_NAME, device_map=DEVICE)
 
     tokenizer = AutoTokenizer.from_pretrained(
         MODEL_NAME,
+        device_map=DEVICE,
         padding_side="left",
     )
     # Set up tokenizer eos

@@ -43,13 +43,13 @@ def generate_response_bulk(
         padding=True,  # Pad to longest in batch
         truncation=True,
         return_tensors="pt",
-    ).to(model.device)
+    )
 
     # Generate responses
     with torch.no_grad():
         outputs = model.generate(
-            inputs.input_ids,
-            attention_mask=inputs.attention_mask,
+            inputs.input_ids.to(DEVICE),
+            attention_mask=inputs.attention_mask.to(DEVICE),
             max_new_tokens=args.max_response_length,
             do_sample=False,  # Greedy decoding
             pad_token_id=tokenizer.pad_token_id,

@@ -2,6 +2,8 @@
 from torch import Tensor
 from jaxtyping import Float
 import torch
+
+from constants import DEVICE
 from custom_types import Role, TaskType, PrimeSample
 from utils.string_formatting import validate_solver_formatting_and_correctness
 
@@ -26,7 +28,7 @@ def compute_r_total(samples: list[PrimeSample], solver_responses: list[str], rol
     """
 
     answers = [validate_solver_formatting_and_correctness(response, task_type, sample) for (sample, response) in zip(samples, solver_responses)] # this is len batch_size
-    r_solve = torch.tensor([answer.reward for answer in answers], dtype=torch.float32)
+    r_solve = torch.tensor([answer.reward for answer in answers], dtype=torch.float32, device=DEVICE)
     if role == Role.PROPOSER:
         # create a tensor to return and populate it with r_propose if r_proposer_format is  >0, else populate with value in r_proposer_format
         r_propose = compute_r_propose(r_solve)
