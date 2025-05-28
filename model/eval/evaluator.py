@@ -3,10 +3,11 @@ import time
 from datetime import datetime
 
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, PreTrainedTokenizerFast, AutoTokenizer
 from typing import List, Optional
 
 from custom_types import ProblemResult, Problem, EvaluationResults
+from model.args import AZRArgs
 from model.eval.prime_inversion import is_prime
 from model.eval.prompts import create_prompt
 from model.inference import generate_response_bulk
@@ -16,11 +17,10 @@ class Evaluator:
     """Evaluator class for running model evaluations on the prime inversion problem"""
 
     def __init__(
-        self,
-        model: AutoModelForCausalLM,
-        tokenizer: AutoTokenizer,
-        max_new_tokens: int = 100,
-        batch_size: int = 1,
+            self,
+            args: AZRArgs,
+            model: AutoModelForCausalLM,
+            tokenizer: PreTrainedTokenizerFast,
     ):
         """
         Initialize the evaluator with model configuration.
@@ -28,17 +28,16 @@ class Evaluator:
         Args:
             model: The AutoModelForCausalLM under evaluation
             tokenizer: The AutoTokenizer for the model
-            max_new_tokens: Maximum number of new tokens to generate
-            batch_size: Number of problems to process in each batch
         """
-        self.max_new_tokens = max_new_tokens
-        self.batch_size = batch_size
         self.model = model
         self.tokenizer = tokenizer
         self.model_name = model.config.name_or_path
+        self.batch_size = args.batch_size
+        self.max_new_tokens = args.max_response_length
+        self.args = args
 
     def _process_batch(
-        self, batch_problems: List[Problem], batch_idx: int, total_batches: int
+            self, batch_problems: List[Problem], batch_idx: int, total_batches: int
     ) -> tuple[List[str], List[str], float]:
         """Process a single batch of problems using generate_response_bulk."""
         batch_prompts = [create_prompt(prob) for prob in batch_problems]
@@ -51,7 +50,7 @@ class Evaluator:
         start_time = time.time()
         # Use generate_response_bulk instead of model.generate
         responses, logprobs, gen_ids, prompt_ids = generate_response_bulk(
-            type("AZRArgs", (), {"max_response_length": self.max_new_tokens})(),
+            self.args,
             self.model,
             self.tokenizer,
             batch_prompts,
@@ -67,11 +66,11 @@ class Evaluator:
         return responses, batch_prompts, batch_time
 
     def _process_problem_result(
-        self,
-        problem: Problem,
-        model_response: str,
-        batch_time: float,
-        batch_size: int,
+            self,
+            problem: Problem,
+            model_response: str,
+            batch_time: float,
+            batch_size: int,
     ) -> ProblemResult:
         """Process the result for a single problem using the already stripped model_response."""
         # model_response is already the response (prompt stripped)
@@ -84,11 +83,11 @@ class Evaluator:
             # Check if answers are equivalent modulo prime
             if problem.blank == "p":
                 is_correct = (
-                    problem.x * problem.y
-                ) % extracted_answer == 1 and is_prime(extracted_answer)
+                                     problem.x * problem.y
+                             ) % extracted_answer == 1 and is_prime(extracted_answer)
             else:
                 is_correct = (extracted_answer % problem.prime) == (
-                    correct_answer % problem.prime
+                        correct_answer % problem.prime
                 )
 
         print(
@@ -96,7 +95,7 @@ class Evaluator:
         )
 
         return {
-            "problem": problem.desc,
+            "problem": str(problem),
             "extracted_answer": extracted_answer,
             "correct_answer": correct_answer,
             "is_correct": is_correct,
@@ -104,13 +103,13 @@ class Evaluator:
         }
 
     def _print_batch_summary(
-        self,
-        batch_idx: int,
-        batch_correct: int,
-        batch_size: int,
-        no_responses: int,
-        overall_correct: int,
-        total_processed: int,
+            self,
+            batch_idx: int,
+            batch_correct: int,
+            batch_size: int,
+            no_responses: int,
+            overall_correct: int,
+            total_processed: int,
     ):
         """Print summary for the current batch."""
         batch_accuracy = batch_correct / batch_size
@@ -126,7 +125,7 @@ class Evaluator:
         )
 
     def _print_final_results(
-        self, results: EvaluationResults, total_eval_time: float, num_problems: int
+            self, results: EvaluationResults, total_eval_time: float, num_problems: int
     ):
         """Print final evaluation results."""
         print("\n🎯 Evaluation completed!")
@@ -157,7 +156,7 @@ class Evaluator:
             return None
 
     def evaluate(
-        self, problems: List[Problem], eval_start_time: float = None
+            self, problems: List[Problem], eval_start_time: float = None
     ) -> EvaluationResults:
         """Run evaluation on the given problems."""
         if eval_start_time is None:
@@ -179,7 +178,7 @@ class Evaluator:
 
         # Process problems in batches with progress bar
         for batch_idx, i in enumerate(range(0, len(problems), self.batch_size)):
-            batch_problems = problems[i : i + self.batch_size]
+            batch_problems = problems[i: i + self.batch_size]
 
             # Use new _process_batch which returns responses
             responses, batch_prompts, batch_time = self._process_batch(
@@ -189,12 +188,11 @@ class Evaluator:
             # Process each result in the batch
             batch_correct = 0
             for j, (problem, model_response) in enumerate(
-                zip(batch_problems, responses)
+                    zip(batch_problems, responses)
             ):
                 problem_result = self._process_problem_result(
                     problem,
                     model_response,
-                    batch_prompts[j],
                     batch_time,
                     len(batch_problems),
                 )
@@ -232,22 +230,19 @@ class Evaluator:
 
 
 def evaluate_model_from_name(
-    model_name: str,
-    problems: List[Problem],
-    max_new_tokens: int = 100,
-    batch_size: int = 1,
+        args: AZRArgs,
+        model_name: str,
+        problems: List[Problem],
 ) -> EvaluationResults:
     """
     Evaluates a language model on a set of programming problems by loading the model
     from its name.
 
+    :param args:
     :param model_name: The name or path of the pre-trained model to load from Hugging Face
                       model hub
     :param problems: List of prime inversion problems to evaluate the model against, each
                     containing test cases and expected outputs
-    :param max_new_tokens: Maximum number of new tokens the model can generate for each
-                          problem solution
-    :param batch_size: Number of problems to process simultaneously in each evaluation batch
     :return: Dictionary containing evaluation results including accuracy
              metrics, timing information, and detailed per-problem analysis
     :raises ValueError: When model_name is empty or invalid
@@ -257,7 +252,7 @@ def evaluate_model_from_name(
 
     print(f"🔄 Loading model: {model_name}")
     print(
-        f"📊 Evaluation setup: {len(problems)} problems, batch_size={batch_size}, max_new_tokens={max_new_tokens}"
+        f"📊 Evaluation setup: {len(problems)} problems, batch_size={args.batch_size}, max_new_tokens={args.max_response_length}"
     )
 
     model = AutoModelForCausalLM.from_pretrained(
@@ -268,26 +263,23 @@ def evaluate_model_from_name(
     print(f"✅ Model loaded successfully on device: {model.device}")
     print("🚀 Starting evaluation...")
 
-    return evaluate_model(model, tokenizer, problems, max_new_tokens, batch_size)
+    return evaluate_model(args, model, tokenizer, problems)
 
 
 def evaluate_model(
-    model: AutoModelForCausalLM,
-    tokenizer: AutoTokenizer,
-    problems: List[Problem],
-    max_new_tokens: int = 100,
-    batch_size: int = 1,
+        args: AZRArgs,
+        model: AutoModelForCausalLM,
+        tokenizer: PreTrainedTokenizerFast,
+        problems: List[Problem],
 ) -> EvaluationResults:
     """
     Evaluates a language model on a set of programming problems using an actual model and tokenizer
 
+    :param args: Parameters for generation
     :param model: The model under evaluation
     :param tokenizer: The tokenizer for the model under evaluation
     :param problems: List of prime inversion problems to evaluate the model against, each
                     containing test cases and expected outputs
-    :param max_new_tokens: Maximum number of new tokens the model can generate for each
-                          problem solution
-    :param batch_size: Number of problems to process simultaneously in each evaluation batch
     :return: Dictionary containing evaluation results including accuracy
              metrics, timing information, and detailed per-problem analysis
     :raises ValueError: When model_name is empty or invalid
@@ -297,6 +289,6 @@ def evaluate_model(
     eval_start_time = time.time()
 
     evaluator = Evaluator(
-        model, tokenizer, max_new_tokens=max_new_tokens, batch_size=batch_size
+        args, model, tokenizer
     )
     return evaluator.evaluate(problems, eval_start_time)
