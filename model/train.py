@@ -9,17 +9,19 @@ from constants import MODEL_NAME, DEVICE
 
 from buffer.base_buff import MegaBuffer
 
-if __name__ == "__main__":
+def main():
     wandb_project_name = "AZR"
     use_wandb = False
     run_name = "AZR-Run"
 
+    model = AutoModelForCausalLM.from_pretrained(MODEL_NAME, device_map=DEVICE)
     args = AZRArgs(
         wandb_project_name=wandb_project_name,
         use_wandb=use_wandb,
         run_name=run_name,
+        d_vocab=model.config.vocab_size
     )
-    model = AutoModelForCausalLM.from_pretrained(MODEL_NAME, device_map=DEVICE)
+
 
     tokenizer = AutoTokenizer.from_pretrained(
         MODEL_NAME,
@@ -33,6 +35,7 @@ if __name__ == "__main__":
         model.parameters(),
         lr=args.lr,  # do we want to set beta?
     )
+
 
     mega_buffer = MegaBuffer(
         args=args,
@@ -85,3 +88,6 @@ if __name__ == "__main__":
     # Save the model
 
     print("Training completed and model saved.")
+
+if __name__ == "__main__":
+    main()

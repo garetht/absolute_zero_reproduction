@@ -5,6 +5,7 @@ import torch
 
 @dataclass
 class AZRArgs:
+    d_vocab: int  # Default for GPT-2 and similar models
     dtype: torch.dtype = torch.bfloat16
 
     # Basic / global
@@ -56,6 +57,5 @@ class AZRArgs:
     n_minibatches: int = 16
     minibatch_size: int = 8
     batch_size = minibatch_size * n_minibatches
-    d_vocab: int = 50257  # Default for GPT-2 and similar models
     clip_ratio: float = 0.2
     eps: float = 1e-5
