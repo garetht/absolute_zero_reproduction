@@ -1,14 +1,13 @@
 from dataclasses import dataclass
-from typing import Callable
 
 import constants
-
 
 
 @dataclass
 class AZRArgs:
     # Basic / global
     seed: int = constants.RANDOM_SEED
+    run_name: str = "AZR-Run"
 
     # Wandb / logging
     use_wandb: bool = False
@@ -54,6 +53,6 @@ class AZRArgs:
     # our params
     n_minibatches: int = 16
     minibatch_size: int = 8
-    batch_size = minibatch_size*n_minibatches
+    batch_size = minibatch_size * n_minibatches
     d_vocab: int = 50257  # Default for GPT-2 and similar models
     clip_ratio: float = 0.2
