@@ -4,7 +4,7 @@ from datetime import datetime
 
 import torch
 from transformers import AutoModelForCausalLM, PreTrainedTokenizerFast, AutoTokenizer
-from typing import List, Optional
+from typing import List
 
 from custom_types import ProblemResult, Problem, EvaluationResults
 from model.args import AZRArgs
@@ -74,7 +74,7 @@ class Evaluator:
     ) -> ProblemResult:
         """Process the result for a single problem using the already stripped model_response."""
         # model_response is already the response (prompt stripped)
-        extracted_answer = self.extract_boxed_number(model_response)
+        extracted_answer = extract_boxed_number(model_response)
         correct_answer = problem.x if problem.blank == "x" else problem.y
 
         # Compare answers (considering modulo)
