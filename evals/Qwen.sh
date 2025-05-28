@@ -1,7 +1,8 @@
 MODEL_NAME=Qwen/Qwen2.5-Coder-3B
+MODEL_NAME=Qwen/Qwen3-1.7B
 
-BENCHMARK=humaneval_plus
 BENCHMARK=hellaswag
+BENCHMARK=tinyGSM8k
 
 lm_eval --model hf \
     --model_args pretrained=$MODEL_NAME \
