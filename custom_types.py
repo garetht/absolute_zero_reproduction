@@ -62,5 +62,5 @@ class PrimeSample(BaseSample):
 class MiniBatch:
     samples: list[BaseSample]
     sample_ids: Int[Tensor, "role task minibatch_size seq_len"]
-    logprobs: Float[Tensor, "role task minibatch_size seq_len vocab_size"]
+    logprobs: Float[Tensor, "role task minibatch_size max_response_length vocab_size"]
 
