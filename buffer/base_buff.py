@@ -33,17 +33,15 @@ class MegaBuffer:
     def __init__(
         self,
         args: AZRArgs,
-        seed_buffer: list[BaseSample],
         logprobs: Int[Tensor, "role task batch_size max_response_len vocab_size"],
         sample_ids: Int[Tensor, "role task batch_size max_response_len"],
-        buffer: list[BaseSample],
     ):
         self.args = args
-        self.seed_buffer = seed_buffer
+        self.seed_buffer: list[BaseSample] = []
         self.logprobs = logprobs
         self.sample_ids = sample_ids
         # batch_size is the index of the sample in the buffer, same for any role task combo
-        self.buffer = buffer
+        self.buffer: list[BaseSample] = []
 
     def get_minibatches(self) -> list[MiniBatch]:
         # looks at the buffer from the current rollout, returns samples indexed using their position in the batch
@@ -97,7 +95,7 @@ class MegaBuffer:
         return [self.combined_buffer[i] for i in indices]
 
     def initialize_seed_buffer(
-        self, num_samples: Optional[int], tokenizer: PreTrainedTokenizerFast
+        self, tokenizer: PreTrainedTokenizerFast, num_samples: Optional[int]
     ) -> None:
         """
         Initialize seed buffer with k (default 1) samples
