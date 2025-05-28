@@ -56,13 +56,20 @@ class AZRTrainer:
     def __init__(self, args: AZRArgs, mega_buffer: MegaBuffer,
                  tokenizer: PreTrainedTokenizerFast,
                  optimizer: torch.optim.Optimizer,
-                 training_model: AutoModelForCausalLM):
+                 training_model: AutoModelForCausalLM, run_name: str):
         """
-        Initialize the AZR trainer with models and configuration.
-        
-        Args:
-            args (AZRArgs): Configuration arguments for training.
-            training_model (AutoModelForCausalLM): The model to be trained.
+        Initializes a new training instance with the provided configuration and components.
+
+        Sets up the training environment by storing references to the model, tokenizer, optimizer,
+        and data buffer. Initializes the training step counter to zero and stores the run name
+        for tracking purposes.
+
+        :param args: Configuration arguments containing training parameters and settings
+        :param mega_buffer: Data buffer containing training samples and batching functionality
+        :param tokenizer: Pre-trained tokenizer for text processing and encoding
+        :param optimizer: PyTorch optimizer for model parameter updates
+        :param training_model: Causal language model to be trained
+        :param run_name: Identifier string for the current training run
         """
         self.args = args
         self.training_model = training_model
@@ -70,6 +77,7 @@ class AZRTrainer:
         self.optimizer = optimizer
         self.mega_buffer = mega_buffer
         self.step = 0
+        self.run_name = run_name
 
     def compute_azr_objective(self, advantages: Float[torch.Tensor, "role task minibatch_size"], new_logprobs: Float[torch.Tensor, "role task minibatch_size seq_len"], new_sample_ids:  Int[torch.Tensor, "role task minibatch_size seq_len"], minibatch: MiniBatch ) -> Float[torch.Tensor, ""]:
         """
