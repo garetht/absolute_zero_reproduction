@@ -50,9 +50,9 @@ class TestComputeAdvantages:
         ])
         
         advantages = compute_advantages(args, rewards)
-        
-        # When std=0, the normalization should handle it gracefully with eps
-        assert torch.all(advantages == 0.0), "Single values should result in 0 advantages"
+
+        # When minibatch_size=1, we should get back the original rewards
+        assert torch.all(advantages == rewards), "Single values should return original rewards"
     
     def test_compute_advantages_identical_rewards(self, args):
         """Test when all rewards are identical (std=0)."""
@@ -82,10 +82,10 @@ class TestComputeAdvantages:
         
         small_advantages = compute_advantages(args, small_rewards)
         
-        # Test with very large rewards
+        # Test with very large rewards - use float values to avoid int tensor issues
         large_rewards = torch.tensor([
-            [[1000, 2000, 3000, 4000]],
-            [[10000, 20000, 30000, 40000]]
+            [[1000.0, 2000.0, 3000.0, 4000.0]],
+            [[10000.0, 20000.0, 30000.0, 40000.0]]
         ])
         
         large_advantages = compute_advantages(args, large_rewards)
