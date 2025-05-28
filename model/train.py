@@ -15,7 +15,7 @@ from utils.mocks.mock_transformer import MockAutoModelForCausalLM
 def main():
     wandb_project_name = "AZR"
     use_wandb = False
-    use_mock = True
+    use_mock = False
     run_name = "AZR-Run"
 
     if use_mock:
