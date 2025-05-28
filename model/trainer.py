@@ -207,6 +207,7 @@ class AZRTrainer:
         """
 
         all_rewards = self.rollout_phase()
+        self.mega_buffer.reset()
         # now do minibatch policy updates
         for mini_batch in self.mega_buffer.get_minibatches(self.args):
             # first do a forward pass on current policy to get the logprobs used in importance ratio
