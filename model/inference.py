@@ -3,6 +3,7 @@ from jaxtyping import Float, Int
 from transformers import AutoModelForCausalLM
 from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
 
+from constants import DEVICE
 from model.args import AZRArgs
 
 
