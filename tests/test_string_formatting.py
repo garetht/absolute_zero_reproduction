@@ -5,7 +5,7 @@ from utils.string_formatting import extract_modular_equations, ModularEquation, 
 
 class TestExtractModularEquation:
     def test_extract_modular_equation_valid_input(self):
-        text = "x * y ≡ 1 (mod p)"
+        text = r"\[x \times y \equiv 1 \pmod{p}\]"
         result = extract_modular_equations(text)
         assert len(result) == 1
         assert result[0].x == "x"
@@ -13,7 +13,7 @@ class TestExtractModularEquation:
         assert result[0].p == "p"
 
     def test_extract_modular_equation_with_numbers(self):
-        text = "5 * 3 ≡ 1 (mod 7)"
+        text = r"\[5 \times 3 \equiv 1 \pmod{7}\]"
         result = extract_modular_equations(text)[0]
         assert result is not None
         assert result.x == 5
@@ -21,7 +21,7 @@ class TestExtractModularEquation:
         assert result.p == 7
 
     def test_extract_modular_equation_mixed_variables_and_numbers(self):
-        text = "a * 4 ≡ 1 (mod 17)"
+        text = r"\[a \times 4 \equiv 1 \pmod{17}\]"
         result = extract_modular_equations(text)
         assert len(result) == 1
         assert result[0].x == "a"
@@ -49,7 +49,7 @@ class TestExtractModularEquation:
         assert len(result) == 0
 
     def test_extract_modular_equation_with_surrounding_text(self):
-        text = "The equation x * y ≡ 1 (mod p) is important."
+        text = r"The equation \[x \times y \equiv 1 \pmod{p}\] is important."
         result = extract_modular_equations(text)[0]
         assert result is not None
         assert result.x == "x"
@@ -59,9 +59,9 @@ class TestExtractModularEquation:
     @pytest.mark.parametrize(
         "text,expected_x,expected_y,expected_p",
         [
-            ("a * b ≡ 1 (mod c)", "a", "b", "c"),
-            ("12 * 5 ≡ 1 (mod 13)", 12, 5, 13),
-            ("var1 * var2 ≡ 1 (mod prime)", "var1", "var2", "prime"),
+            (r"\[a \times b \equiv 1 \pmod{c}\]", "a", "b", "c"),
+            (r"\[12 \times 5 \equiv 1 \pmod{13}\]", 12, 5, 13),
+            (r"\[var1 \times var2 \equiv 1 \pmod{prime}\]", "var1", "var2", "prime"),
         ]
     )
     def test_extract_modular_equation_parametrized(self, text, expected_x, expected_y, expected_p):
@@ -104,7 +104,8 @@ class TestValidateFormattingAndCorrectnessBulk:
     def test_validate_formatting_and_correctness_bulk_invalid_formatting(self):
         responses = ["invalid equation format"]
         result = validate_proposer_formatting_and_correctness_bulk(responses, TaskType.ABDUCTION)
-        assert len(result) == 0
+        assert len(result) == 1
+        assert result[0].reward == -1.0
 
     def test_validate_formatting_and_correctness_bulk_multiple_responses(self):
         responses = ["3 * 5 ≡ 1 (mod 7)", "2 * 4 ≡ 1 (mod 7)"]

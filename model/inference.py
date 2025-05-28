@@ -128,14 +128,14 @@ def generate_response_bulk(
 
 
 def remove_dvocab_from_logprobs(
-    logprobs: Float[torch.Tensor, "batch_size max_response_len vocab_size"],
-    tokens: Int[torch.Tensor, "batch_size max_response_len"],
-) -> Float[torch.Tensor, "batch_size max_response_len"]:
+    logprobs: Float[torch.Tensor, "role task batch_size max_response_len vocab_size"],
+    tokens: Int[torch.Tensor, "role task batch_size max_response_len"],
+) -> Float[torch.Tensor, "role task batch_size max_response_len"]:
     """
     Extract log probabilities for generated tokens.
 
     Args:
-        logprobs: Log probabilities for all tokens in the vocab_sizeulary
+        logprobs: Log probabilities for all tokens in the vocabulary
         tokens: Generated token IDs (already excluding prompt)
 
     Returns:
