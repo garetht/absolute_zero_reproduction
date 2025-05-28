@@ -344,10 +344,11 @@ def validate_single_response(str_response: str, config: dict) -> list[Answer]:
 
 def create_problem_from_answer(answer: Answer, task_type: TaskType) -> Problem:
     """Create a Problem from an Answer object"""
+    assert answer.program is not None, "Answer must have a program (prime) defined"
     return Problem(
         prime=answer.program,
-        x_list=[answer.input] if answer.input is not None else [0],
-        y_list=[answer.output] if answer.output is not None else [0], 
+        x_list=[answer.input] if answer.input is not None else [],
+        y_list=[answer.output] if answer.output is not None else [], 
         task_type=task_type
     )
 
