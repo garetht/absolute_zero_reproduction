@@ -11,6 +11,7 @@ from transformers import AutoModelForCausalLM
 from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
 
 from buffer.base_buff import BaseBuffer, MegaBuffer
+from constants import DEVICE
 from custom_types import MiniBatch, TaskType, Role, IOPair, PrimeSample, Answer
 from model.args import AZRArgs
 from model.compute.advantages import compute_advantages
@@ -104,8 +105,8 @@ class AZRTrainer:
             BaseBuffer: BaseBuffer containing rollout data for the learning phase.
         """
         # 
-        proposer_format_correctness_rewards = torch.tensor((len(TaskType), self.args.train_batch_size))
-        all_rewards = torch.tensor((len(TaskType), self.args.train_batch_size))
+        proposer_format_correctness_rewards = torch.tensor((len(TaskType), self.args.train_batch_size), device=DEVICE)
+        all_rewards = torch.tensor((len(TaskType), self.args.train_batch_size), device=DEVICE)
         self.step += 1
         for batch_idx in range(self.args.train_batch_size):
             induction_sample: PrimeSample = self.mega_buffer.sample_from_buffer(num_to_sample=1)[0]
@@ -160,7 +161,7 @@ class AZRTrainer:
                             Role.PROPOSER.value, task_type.value, batch_idx, ...] = induction_logprobs
                         # TODO: maybe not mean??
                         proposer_format_correctness_rewards[task_type.value, batch_idx] = torch.tensor(
-                            [a.reward for a in induction_answers]).mean()
+                            [a.reward for a in induction_answers], device=DEVICE).mean()
                         self.mega_buffer.sample_ids[
                             Role.PROPOSER.value, task_type.value, batch_idx, ...] = induction_sample_ids
 

@@ -105,10 +105,11 @@ def extract_boxed_number(text: str) -> Optional[int]:
 def format_as_string(sample: PrimeSample, task_type: TaskType, role: Role, num_io_pairs: Optional[int] = 0) -> str:
     match role:
         case Role.PROPOSER:
-            create_proposer_prompt(Problem.from_prime_sample(sample, task_type), num_io_pairs=num_io_pairs)
+            return create_proposer_prompt(Problem.from_prime_sample(sample, task_type), num_io_pairs=num_io_pairs)
         case Role.SOLVER:
-            create_solver_prompt(Problem.from_prime_sample(sample, task_type))
+            return create_solver_prompt(Problem.from_prime_sample(sample, task_type))
 
+    raise ValueError(f"unexpected role {role}")
 
 def validate_proposer_formatting_and_correctness(response: str, task_type: TaskType) -> Answer:
     return validate_proposer_formatting_and_correctness_bulk([response], task_type)[0]
