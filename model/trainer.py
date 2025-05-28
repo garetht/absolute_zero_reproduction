@@ -6,6 +6,7 @@ language models using the AZR methodology. It provides functionality for
 rollout phases, learning phases, and objective computation.
 """
 import torch
+import wandb
 from jaxtyping import Float, Int
 from transformers import AutoModelForCausalLM
 from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
@@ -17,6 +18,7 @@ from model.args import AZRArgs
 from model.compute.advantages import compute_advantages
 from model.compute.reward import compute_r_total
 from model.inference import generate_response, generate_response_bulk, remove_dvocab_from_logprobs
+from model.eval.baselines import run_baseline_evaluation_prime_samples
 from utils.string_formatting import validate_proposer_formatting_and_correctness, \
     create_sample_from_answer, format_as_string, validate_single_response, CHECK_MAP
 
@@ -106,7 +108,6 @@ class AZRTrainer:
         """
         proposer_format_correctness_rewards = torch.tensor((len(TaskType), self.args.train_batch_size), device=DEVICE)
         all_rewards = torch.tensor((len(TaskType), self.args.train_batch_size), device=DEVICE)
-        self.step += 1
 
         for batch_idx in range(self.args.train_batch_size):
             induction_sample: PrimeSample = self.mega_buffer.sample_from_buffer(num_to_sample=1)[0]
@@ -226,6 +227,7 @@ class AZRTrainer:
 
         # now do minibatch policy updates
         for mini_batch in self.mega_buffer.get_minibatches(self.args):
+            self.step += 1
             # first do a forward pass on current policy to get the logprobs used in importance ratio
             # get the prompts that we need to use for the forawrd
             prompts = [self.tokenizer.decode(s.prompt_tokens, skip_special_tokens=True) for s in mini_batch.samples]
@@ -240,3 +242,25 @@ class AZRTrainer:
             objective.backward()
             torch.nn.utils.clip_grad_norm_(self.training_model.parameters(), self.args.max_grad_norm)
             self.optimizer.step()
+            
+            # Evaluate after gradient update
+            eval_results = run_baseline_evaluation_prime_samples(
+                self.args, self.training_model, self.tokenizer, mini_batch.samples
+            )
+            print(f"Minibatch accuracy: {eval_results['accuracy']:.2%}")
+            
+            # Log metrics to wandb if enabled
+            if self.args.use_wandb:
+                # Log accuracy
+                wandb.log({"minibatch_accuracy": eval_results['accuracy']}, step=self.step)
+                
+                # Log rewards by role and task type
+                reward_logs = {}
+                for role_idx, role in enumerate(['proposer', 'solver']):
+                    for task_idx, task in enumerate(['abduction', 'deduction', 'induction']):
+                        mean_reward = all_rewards[role_idx, task_idx].mean().item()
+                        reward_logs[f"reward/{role}_{task}"] = mean_reward
+                
+                wandb.log(reward_logs, step=self.step)
+            
+            
