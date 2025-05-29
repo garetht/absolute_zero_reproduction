@@ -63,7 +63,7 @@ class MegaBuffer:
                 dtype=torch.int, device=self.sample_ids.device
             )
             minibatch_logprobs = torch.zeros(
-                (len(Role), len(TaskType), self.args.minibatch_size, self.args.max_response_length, self.args.d_vocab),
+                (len(Role), len(TaskType), self.args.minibatch_size, self.args.max_response_length),
                 dtype=self.logprobs.dtype, device=self.logprobs.device
             )
             minibatch_attention_masks = torch.zeros(
@@ -128,7 +128,10 @@ class MegaBuffer:
             response, logprobs, sample_ids, prompt_ids, attention_mask = generate_response(
                 self.args, model, tokenizer, prompt
             )
-            
+
+            print(f"{logprobs.shape=}")
+            print(f"{minibatch_logprobs.shape=}")
+
             # Store in minibatch tensors (only for this problem's task type)
             minibatch_sample_ids[role.value, problem.task_type.value, mb_idx] = sample_ids
             minibatch_logprobs[role.value, problem.task_type.value, mb_idx] = logprobs
@@ -139,9 +142,11 @@ class MegaBuffer:
         return self.seed_buffer + self.buffer
 
     def sample_from_buffer(self, num_to_sample: int) -> list[Problem]:
+        print(f"{len(self.combined_buffer)=}")
         indices = numpy.random.choice(
             len(self.combined_buffer), num_to_sample, replace=True
         )
+        print(f"{indices=}")
         return [self.combined_buffer[i] for i in indices]
 
     def initialize_seed_buffer(

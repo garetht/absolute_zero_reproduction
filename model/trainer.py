@@ -92,20 +92,16 @@ class AZRTrainer:
         new_logprobs = new_logprobs.gather(-1, minibatch.sample_ids.unsqueeze(-1).to(torch.int64)).squeeze(
             -1)  # shape: (role, task, minibatch_size, seq_len)
 
-        print(f"{minibatch.sample_ids.shape=}")
-        print(f"{minibatch.sample_ids=}")
         old_logprobs = minibatch.logprobs
-        print(f"{new_logprobs.shape=}")
-        print(f"{old_logprobs.shape=}")
-
-        print(f"{new_logprobs[0][0][0]=}")
-        print(f"{old_logprobs[0][0][0][0][:20]=}")
 
         importance_ratio = (new_logprobs - old_logprobs).exp()  # shape: (role, task, minibatch_size, seq_len)
 
         # Apply attention masks to zero out padded positions
         attention_masks = minibatch.attention_masks.float()  # shape: (role, task, minibatch_size, seq_len)
         masked_importance_ratio = importance_ratio * attention_masks
+
+        print(f"{advantages.shape=}")
+        print(f"{masked_importance_ratio.shape=}")
 
         non_clipped = advantages * masked_importance_ratio  # shape: (role, task, minibatch_size, seq_len, )
         # compute the clipped objective
@@ -170,6 +166,11 @@ class AZRTrainer:
             # BEFORE SOLVING, WRITE LOGPROBS TO THE MEGA BUFFER AND PARTIAL REWARDS TO OUR TENSOR
             # write logprobs to the mega buffer
             # megabuffer.logprobs shape : (role task batch_size seq_len vocab_size)
+            print(f"{abduction_logprobs.shape=}")
+            print(f"{deduction_logprobs.shape=}")
+            print(f"{induction_logprobs.shape=}")
+            print(f"{self.mega_buffer.logprobs.shape=}")
+
             for idx, task_type in enumerate(TaskType):
                 match task_type:
                     case TaskType.ABDUCTION:
@@ -205,6 +206,8 @@ class AZRTrainer:
         for task_type in TaskType:
             problems: list[Problem] = self.mega_buffer.sample_from_buffer(num_to_sample=self.args.batch_size)
             task_prompts = [problem.get_prompt(Role.SOLVER) for problem in problems]
+            print(f"{task_prompts=}")
+            print(f"{len(problems)=}")
             responses, logprobs, sample_ids, prompt_ids, attention_masks = generate_response_bulk(self.args,
                                                                                                   self.training_model,
                                                                                                   self.tokenizer,
@@ -235,6 +238,8 @@ class AZRTrainer:
         response, logprobs, sample_ids, prompt_tokens, attention_mask = generate_response(self.args,
                                                                                           self.training_model,
                                                                                           self.tokenizer, prompt)
+
+        print(f"{response=}")
         # Note: prompt_tokens no longer needed since Problem caches prompts
         return response, logprobs, sample_ids, attention_mask
 

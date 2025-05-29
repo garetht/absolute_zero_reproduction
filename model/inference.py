@@ -11,6 +11,8 @@ from model.args import AZRArgs
 
 def generate_without_grads(model: torch.nn.Module, inputs: BatchEncoding, tokenizer: PreTrainedTokenizerFast, max_new_tokens: int, device: torch.device) -> \
         tuple[Int[torch.Tensor, "batch_size max_response_len"], Float[torch.Tensor, "batch_size max_response_len"]]:
+        print(f"{inputs.input_ids.shape=}")
+
         outputs = model.generate(
             inputs.input_ids.to(DEVICE),
             attention_mask=inputs.attention_mask.to(DEVICE),
@@ -22,9 +24,13 @@ def generate_without_grads(model: torch.nn.Module, inputs: BatchEncoding, tokeni
             use_cache=True,
         )
         generated_ids = outputs.sequences[:, inputs.input_ids.shape[1] :]
+        print(f"{generated_ids.shape=}")
+
+        scores = torch.cat(outputs.scores, dim=0)
+        logprobs = torch.log_softmax(scores, dim=-1)
 
         # TODO: need to slice this?
-        return generated_ids, outputs.scores[-1]
+        return generated_ids, logprobs.gather(dim=-1, index=generated_ids.to(torch.int64)).squeeze(-1)
 
 
 # returns the str response and the logprobs for the response
@@ -69,17 +75,16 @@ def generate_response_bulk(
     # Tokenize inputs with padding
     inputs = tokenizer(
         prompts,
-        padding=True,  # Pad to longest in batch
+        padding='max_length',  # Pad to longest in batch
+        max_length=args.max_prompt_length,
         truncation=True,
         return_tensors="pt",
     )
 
     # Generate responses
-    generated_ids, generated_logits = generate_without_grads(
+    generated_ids, logprobs = generate_without_grads(
         model, inputs, tokenizer, args.max_response_length, DEVICE
     )
-    print("Received responses from model: generated logits")
-    print(generated_logits)
 
     # Extract generated tokens (excluding input tokens), shape (batch_size, actual_length)
     actual_length = generated_ids.shape[1]
@@ -119,7 +124,6 @@ def generate_response_bulk(
 
     # Process logits and pad to max_response_length
     # logits are these shape: (actual_length, batch_size, vocab_size) before transpose
-    logprobs = torch.log_softmax(generated_logits, dim=-1)
     print("Receiving responses from model")
     for response in responses:
         print(response)
