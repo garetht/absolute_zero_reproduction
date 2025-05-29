@@ -215,22 +215,6 @@ def get_samples(
 
 # %%
 
-if MAIN:
-    sample_ids, samples = get_samples(
-        model.base_model,
-        prompt="So long, and thanks for all the",
-        batch_size=5,
-        gen_len=15,
-        temperature=0.8,
-        top_k=15,
-        prepend_bos=False,
-    )
-
-    table = Table("Token IDs", "Samples", title="Demo of `sample` function", show_lines=True)
-    for ids, sample in zip(sample_ids, samples):
-        table.add_row(str(ids.tolist()), repr(sample))
-
-    rprint(table)
 
 # %%
 
@@ -256,16 +240,6 @@ def reward_fn_solver(generated_sample: list[str]) -> Float[Tensor, "batch"]:
     return t.tensor(rewards, device=device, dtype=t.float)
 
 
-if MAIN:
-    # Test your reward function
-    A = "This is a test."
-    B = "......"
-    C = "Whatever"
-
-    t.testing.assert_close(reward_fn_char_count([A]), t.tensor([1.0], device=device))
-    t.testing.assert_close(reward_fn_char_count([A, B, C]), t.tensor([1.0, 6.0, 0.0], device=device))
-    t.testing.assert_close(reward_fn_char_count([A], " "), t.tensor([3.0], device=device))
-    print("All tests for `reward_fn_char_count` passed!")
 
 # %%
 
