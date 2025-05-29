@@ -52,8 +52,8 @@ class AZRArgs:
     k_references: int = 6
     n_samples_to_estimate_task_accuracy: int = 8
     # our params
-    n_minibatches: int = 4
-    minibatch_size: int = 2
+    n_minibatches: int = 2
+    minibatch_size: int = 1
     batch_size = minibatch_size * n_minibatches
     clip_ratio: float = 0.2
     eps: float = 1e-5

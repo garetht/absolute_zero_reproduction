@@ -4,9 +4,9 @@ from transformers import AutoModelForCausalLM, BatchEncoding
 from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
 
 from constants import DEVICE
-from david.sampler import generate_with_logprobs
+from david.sampler import generate_with_logprobs, generate_with_logprobs_2
 from model.args import AZRArgs
-
+from utils.debug_grads import debug_tensor_grads
 
 
 def generate_without_grads(model: torch.nn.Module, inputs: BatchEncoding, tokenizer: PreTrainedTokenizerFast, max_new_tokens: int, device: torch.device) -> \
@@ -132,7 +132,7 @@ def generate_response_bulk(
     if actual_length < args.max_response_length:
         padding_length = args.max_response_length - actual_length
         logprobs_padding = torch.zeros(
-            (logprobs.shape[0], padding_length, logprobs.shape[2]),
+            (logprobs.shape[0], padding_length),
             dtype=logprobs.dtype,
             device=logprobs.device
         )
@@ -152,13 +152,13 @@ def generate_response_bulk_with_grads(
     Float[torch.Tensor, "batch_size max_response_len d_vocab"],
     Float[torch.Tensor, "batch_size max_response_len"],
     Int[torch.Tensor, "batch_size max_response_len"],
-    Int[torch.Tensor, "batch_size max_response_len"],
+    Int[torch.Tensor, "batch_size max_response_len d_vocab"],
 ]:
-    completion_ids, all_logprobs, logprobs_per_token = generate_with_logprobs(
-        args, model, tokenizer, prompts
+    completion_ids, all_logprobs, logprobs_per_token, attention_masks = generate_with_logprobs_2(
+        model, tokenizer, prompts, args
     )
 
-    return all_logprobs, logprobs_per_token, completion_ids # , attention mask
+    return all_logprobs, logprobs_per_token, completion_ids, attention_masks
 
 
 # def remove_dvocab_from_logprobs(

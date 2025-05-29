@@ -14,12 +14,14 @@ from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
 from buffer.base_buff import BaseBuffer, MegaBuffer
 from constants import DEVICE
 from custom_types import MiniBatch, TaskType, Role, IOPair, Answer, Problem
+from david.sampler import generate_with_logprobs
 from model.args import AZRArgs
 from model.compute.advantages import compute_advantages
 from model.compute.reward import compute_r_total
 from model.inference import generate_response, generate_response_bulk, \
     generate_response_bulk_with_grads
 from model.eval.baselines import run_baseline_evaluation_prime_samples
+from utils.debug_grads import debug_tensor_grads
 from utils.string_formatting import validate_proposer_formatting_and_correctness, \
     create_problem_from_answer, validate_single_response, CHECK_MAP
 
@@ -100,13 +102,18 @@ class AZRTrainer:
         attention_masks = minibatch.attention_masks.float()  # shape: (role, task, minibatch_size, seq_len)
         masked_importance_ratio = importance_ratio * attention_masks
 
-        print(f"{advantages.shape=}")
-        print(f"{masked_importance_ratio.shape=}")
-
-        non_clipped = advantages * masked_importance_ratio  # shape: (role, task, minibatch_size, seq_len, )
+        unsqueezed_advantages = advantages.unsqueeze(-1)
+        non_clipped = unsqueezed_advantages * masked_importance_ratio  # shape: (role, task, minibatch_size, seq_len, )
         # compute the clipped objective
-        clipped = advantages.clamp(-self.args.clip_ratio,
+        clipped = unsqueezed_advantages.clamp(-self.args.clip_ratio,
                                    self.args.clip_ratio) * masked_importance_ratio  # shape: (role, task, minibatch_size, seq_len,
+
+
+        debug_tensor_grads(non_clipped, "non_clipped")
+        debug_tensor_grads(clipped, "clipped")
+        debug_tensor_grads(masked_importance_ratio, "masked_importance_ratio")
+        debug_tensor_grads(importance_ratio, "importance_ratio")
+        debug_tensor_grads(attention_masks, "attention_masks")
 
         # Use attention masks for proper averaging - only count valid positions
         objective_per_position = torch.minimum(non_clipped, clipped)
@@ -118,7 +125,7 @@ class AZRTrainer:
 
     # Ensure gradients are not computed
     @torch.no_grad()
-    def rollout_phase(self) -> Float[torch.Tensor, "role task batch_size"]:
+    def rollout_phase(self) ->  None:
         """
         Execute the rollout phase of AZR training.
         
@@ -229,7 +236,8 @@ class AZRTrainer:
                                                                            task_type,
                                                                            r_format_proposer)
 
-        return all_rewards  # shape: (role, task, batch_size)
+        # Store rewards in buffer for sampling
+        self.mega_buffer.rewards = all_rewards
 
     def propose_task(self, task_type: TaskType) -> tuple[
         str, Float[torch.Tensor, "seq_len vocab_size"], Int[torch.Tensor, "seq_len"], Int[torch.Tensor, "seq_len"]]:
@@ -271,7 +279,8 @@ class AZRTrainer:
         """
 
         self.mega_buffer.reset()
-        all_rewards = self.rollout_phase()
+
+        self.rollout_phase()
 
         # now do minibatch policy updates
         for mini_batch in self.mega_buffer.get_minibatches(self.training_model, self.tokenizer):
@@ -290,21 +299,20 @@ class AZRTrainer:
 
             for role in Role:
                 prompts = [problem.get_prompt(role) for problem in mini_batch.samples]
-                all_logprobs, logprobs, completion_ids = generate_response_bulk_with_grads(
+                all_logprobs, logprobs, completion_ids, attention_masks = generate_response_bulk_with_grads(
                     self.args, self.training_model, self.tokenizer, prompts
                 )
 
-                print(f"{new_logprobs.shape=}")
-                print(f"{all_logprobs.shape=}")
-                print(f"{completion_ids.shape=}")
-
                 # Fill tensor for this role across all task types (but only the problem's specific task type matters)
                 for mb_idx, problem in enumerate(mini_batch.samples):
+                    print(f"{all_logprobs.shape=}")
+                    print(f"{new_logprobs.shape=}")
                     new_logprobs[role.value, problem.task_type.value, mb_idx] = all_logprobs[mb_idx]
-                    # new_attention_masks[role.value, problem.task_type.value, mb_idx] = attention_masks[mb_idx]
+                    new_attention_masks[role.value, problem.task_type.value, mb_idx] = attention_masks[mb_idx]
 
-            advantages = compute_advantages(self.args, all_rewards)  # shape role task minibatch_size
+            advantages = compute_advantages(self.args, mini_batch.rewards)  # shape role task minibatch_size
             objective = self.compute_azr_objective(advantages, new_logprobs, completion_ids, mini_batch)
+
             self.optimizer.zero_grad()
             objective.backward()
             torch.nn.utils.clip_grad_norm_(self.training_model.parameters(), self.args.max_grad_norm)
@@ -325,7 +333,7 @@ class AZRTrainer:
                 reward_logs = {}
                 for role_idx, role in enumerate(['proposer', 'solver']):
                     for task_idx, task in enumerate(['abduction', 'deduction', 'induction']):
-                        mean_reward = all_rewards[role_idx, task_idx].mean().item()
+                        mean_reward = self.mega_buffer.rewards[role_idx, task_idx].mean().item()
                         reward_logs[f"reward/{role}_{task}"] = mean_reward
 
                 wandb.log(reward_logs, step=self.step)
