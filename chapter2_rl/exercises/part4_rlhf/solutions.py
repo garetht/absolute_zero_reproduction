@@ -84,7 +84,7 @@ class RLHFArgs:
 
     # Base model & sampling arguments
     base_model: str = BASE_MODEL
-    gen_len: int = 30
+    gen_len: int = 130
     temperature: float = 1.0
     top_k: int = 10
     prefix: str = create_solver_prompt(PROBLEM)
@@ -811,7 +811,7 @@ class RLHFTrainer:
 
 if MAIN:
     # Testing your setup: kl_coef=0.0 (see dropdown above the previous code block for explanation)
-    args = RLHFArgs(use_wandb=False, kl_coef=0.0, total_phases=30, warmup_steps=0, reward_fn=reward_fn_char_count)
+    args = RLHFArgs(use_wandb=False, kl_coef=0.0, total_phases=30, warmup_steps=0, reward_fn=reward_fn_solver)
     trainer = RLHFTrainer(args)
     trainer.train()
 
