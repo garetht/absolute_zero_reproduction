@@ -235,9 +235,9 @@ def validate_largeness(text: str) -> float:
     converted_numbers = []
     for num in numbers:
         if '.' in num:
-            converted_numbers.append(math.log(float(num)))
+            converted_numbers.append(math.log(math.log(float(num))))
         else:
-            converted_numbers.append(math.log(int(num)))
+            converted_numbers.append(math.log(math.log(int(num))))
 
     converted_numbers = [num if num > 0 else -0.1 for num in converted_numbers]
 
