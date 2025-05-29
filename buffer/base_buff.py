@@ -30,7 +30,7 @@ class MegaBuffer:
     def __init__(
         self,
         args: AZRArgs,
-        logprobs: Int[Tensor, "role task batch_size max_response_len vocab_size"],
+        logprobs: Int[Tensor, "role task batch_size max_response_len"],
         sample_ids: Int[Tensor, "role task batch_size max_response_len"],
         attention_masks: Int[Tensor, "role task batch_size max_response_len"] = None,
     ):

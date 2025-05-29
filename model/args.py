@@ -33,13 +33,13 @@ class AZRArgs:
     prepend_bos: bool = True
 
     # Model Configuration
-    max_prompt_length: int = 6144
-    max_response_length: int = 128
+    max_prompt_length: int = 128
+    max_response_length: int = 256
     seed_batch_factor: int = 4
     max_programs: int = 16384
 
     # Training Settings
-    lr: float = 1e-6
+    lr: float = 1e-5 # dave made me change this
     grad_clip: float = 1.0
     total_steps: int = 500
 
