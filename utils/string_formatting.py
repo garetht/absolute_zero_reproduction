@@ -399,7 +399,7 @@ def validate_solver_formatting_and_correctness(response: str, task_type: TaskTyp
             input=sample.x,
             output=sample.y,
             program=sample.prime,
-            reward=1.0,
+            reward=2.0,
         )
     else:
         return INCORRECT_ANSWER
