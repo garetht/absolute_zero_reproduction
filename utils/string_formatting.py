@@ -25,13 +25,13 @@ Provide your answer as a single boxed number e.g.
 """
 
 BOXED_NUMBER_Y = """
-Provide your answer as a single boxed number within e.g. \[
+Provide your answer as a single boxed number e.g. \[
 \\boxed{{y}}
 \]
 """
 
 BOXED_NUMBER_P = """
-Provide your answer as a single boxed number within e.g. \[
+Provide your answer as a single boxed number e.g. \[
 \\boxed{{p}}
 \]
 """
@@ -46,7 +46,7 @@ Provide your answer as {num_io_pairs} equation(s) each in a separate boxed equat
 """
 
 BOXED_EQUATION = """
-Provide your answer as a single boxed equation in the format with the variables in the square brackets filled in e.g. \[
+Answer with a single boxed equation in this format: \[
 \\boxed{{x * y ≡ 1 (mod p)}}
 \]
 """
@@ -68,7 +68,7 @@ x * {y} ≡ 1 (mod {prime})
 
 DEDUCTION_SOLVER_PROMPT = """<|im_start|>user
 ## Task:
-Given a prime number p and an integer x, find y such that:
+Given a prime p and an integer x, solve for y:
 
 {x} * y ≡ 1 (mod {prime})
 
