@@ -9,13 +9,20 @@ from constants import MODEL_NAME, DEVICE
 from custom_types import Role, TaskType
 
 from buffer.base_buff import MegaBuffer
+from utils.mocks.mock_transformer import MockAutoModelForCausalLM
+
 
 def main():
     wandb_project_name = "AZR"
     use_wandb = False
+    use_mock = True
     run_name = "AZR-Run"
 
-    model = AutoModelForCausalLM.from_pretrained(MODEL_NAME, device_map=DEVICE)
+    if use_mock:
+        model = MockAutoModelForCausalLM()
+    else:
+        model = AutoModelForCausalLM.from_pretrained(MODEL_NAME, device_map=DEVICE)
+        
     args = AZRArgs(
         wandb_project_name=wandb_project_name,
         use_wandb=use_wandb,
