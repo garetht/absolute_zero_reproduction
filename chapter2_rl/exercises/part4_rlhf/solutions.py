@@ -66,7 +66,7 @@ class RLHFArgs:
 
     # Duration of different phases
     total_phases: int = 100
-    batch_size: int = 128
+    batch_size: int = 32
     num_minibatches: int = 4
     batches_per_learning_phase: int = 2
 
@@ -84,7 +84,7 @@ class RLHFArgs:
 
     # Base model & sampling arguments
     base_model: str = BASE_MODEL
-    gen_len: int = 200
+    gen_len: int = 250
     temperature: float = 1.0
     top_k: int = 10
     prefix: str = create_solver_prompt(PROBLEM)
