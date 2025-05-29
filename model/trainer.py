@@ -232,35 +232,6 @@ class AZRTrainer:
         # Store rewards in buffer for sampling
         self.mega_buffer.rewards = all_rewards
 
-    # DEPRECATED: These functions are replaced by batched approach in rollout_phase
-    # Keeping them commented out for now in case we need to revert
-    # def propose_task(self, task_type: TaskType) -> tuple[
-    #     str, Float[torch.Tensor, "seq_len vocab_size"], Int[torch.Tensor, "seq_len"], Int[torch.Tensor, "seq_len"]]:
-    #     problem = self.mega_buffer.sample_from_buffer(num_to_sample=1)[0]
-    #     prompt = problem.get_prompt(Role.PROPOSER)
-    #     response, logprobs, sample_ids, prompt_tokens, attention_mask = generate_response(self.args,
-    #                                                                                       self.training_model,
-    #                                                                                       self.tokenizer, prompt)
-    #
-    #     print(f"{response=}")
-    #     # Note: prompt_tokens no longer needed since Problem caches prompts
-    #     return response, logprobs, sample_ids, attention_mask
-    #
-    # def generate_and_validate_io_pairs(self, program: Problem, num_io_pairs: int) -> tuple[
-    #     list[IOPair], Float[torch.Tensor, "seq_len vocab_size"], Int[torch.Tensor, "seq_len"], Int[
-    #         torch.Tensor, "max_prompt_len"], list[Answer], Int[torch.Tensor, "seq_len"]]:
-    #     induction_prompt = program.get_prompt(Role.PROPOSER)
-    #     response, logprobs, sample_ids, prompt_tokens, attention_mask = generate_response(self.args,
-    #                                                                                       self.training_model,
-    #                                                                                       self.tokenizer,
-    #                                                                                       induction_prompt)
-    #
-    #     answers = validate_single_response(response, CHECK_MAP[TaskType.INDUCTION])
-    #     valid_answers = [a for a in answers if a.is_valid]
-    #
-    #     io_pairs = [IOPair(input_str=e.input, output_str=e.output) for e in valid_answers]
-    #     # Note: prompt_tokens no longer needed since Problem caches prompts
-    #     return io_pairs, logprobs, sample_ids, prompt_tokens, answers, attention_mask
 
     def learning_phase(self) -> None:
         """
