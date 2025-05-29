@@ -22,6 +22,11 @@ def run_baseline_evaluation_prime_samples(args: AZRArgs, model: AutoModelForCaus
     :param problems: Collection of problems to be evaluated
     :return: Dictionary containing evaluation results and metrics
     """
+
+    print("running baseline eval!")
+    for problem in problems:
+        print(str(problem))
+
     return evaluate_model(
         args,
         model, tokenizer, problems
