@@ -163,6 +163,10 @@ class Problem:
                 f"Find a p such that {self.x} * {self.y} ≡ 1 (mod p) [p = {self.prime}]"
             )
 
+    def __str__(self) -> str:
+        """Return a Python literal representation that can be evaluated."""
+        return f"Problem(prime={self.prime}, x_list={self.x_list}, y_list={self.y_list}, task_type=TaskType.{self.task_type.name})"
+
     @staticmethod
     def from_prime_sample(prime_sample: PrimeSample, task_type: TaskType) -> "Problem":
         return Problem(
@@ -186,7 +190,8 @@ class EvaluationResults(TypedDict):
 
 @dataclass
 class MiniBatch:
-    samples: list[BaseSample]
+    samples: list[Problem]
     sample_ids: Int[Tensor, "role task minibatch_size seq_len"]
     logprobs: Float[Tensor, "role task minibatch_size max_response_length"]
     attention_masks: Int[Tensor, "role task minibatch_size seq_len"]
+    rewards: Float[Tensor, "role task minibatch_size"]

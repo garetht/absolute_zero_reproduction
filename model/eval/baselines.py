@@ -12,10 +12,7 @@ from model.eval.prime_inversion import generate_problems, PRIMES
 
 def run_baseline_evaluation_prime_samples(args: AZRArgs, model: AutoModelForCausalLM,
                                           tokenizer: AutoTokenizer,
-                                          problems: list[Problem],
-                                          max_new_tokens: int = 100,
-                                          batch_size: int = 1,
-                                          seed: int = 42) -> EvaluationResults:
+                                          problems: list[Problem]) -> EvaluationResults:
     """
     This function takes problems and then performs baseline evaluation using the specified model
      and parameters.
@@ -24,15 +21,16 @@ def run_baseline_evaluation_prime_samples(args: AZRArgs, model: AutoModelForCaus
     :param model: Model being evaluated
     :param tokenizer: Tokenizer for the model being evaluated
     :param problems: Collection of problems to be evaluated
-    :param max_new_tokens: Maximum number of new tokens to generate during evaluation
-    :param batch_size: Number of problems to process in each batch
-    :param seed: Random seed for reproducibility
     :return: Dictionary containing evaluation results and metrics
     """
+
+    print("running baseline eval!")
+    for problem in problems:
+        print(str(problem))
+
     return evaluate_model(
         args,
-        model, tokenizer, problems, max_new_tokens,
-        batch_size
+        model, tokenizer, problems
     )
 
 
