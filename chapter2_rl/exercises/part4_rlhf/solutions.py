@@ -670,8 +670,8 @@ class RLHFTrainer:
 
         n_log_samples = min(3, self.args.batch_size)
         headers = ["Reward", "Sample"]
-        table_data = [[str(int(r)), f"{lp:.2f}", repr(s)] for r, lp, s in zip(rewards.tolist(), samples)]
-        table = tabulate(table_data, headers, tablefmt="simple_grid", maxcolwidths=[None, None, 90])
+        table_data = [[str(int(r)), repr(s)] for r, s in zip(rewards.tolist(), samples)]
+        table = tabulate(table_data, headers, tablefmt="simple_grid", maxcolwidths=[None, 90])
         print(f"Phase {self.phase+1:03}/{self.args.total_phases:03}, Mean reward: {rewards_mean:.4f}\n{table}\n")
 
         return ReplayMemory(args=self.args, sample_ids=sample_ids, logprobs=logprobs, advantages=advantages,
