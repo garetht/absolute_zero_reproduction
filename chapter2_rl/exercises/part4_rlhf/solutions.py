@@ -89,7 +89,7 @@ class RLHFArgs:
     gen_len: int = 30
     temperature: float = 1.0
     top_k: int = 10
-    prefix: str = create_solver_prompt(PROBLEM)
+    prefix: str = "Write a large number."
     prepend_bos: bool = True
 
     # RLHF-specific arguments
