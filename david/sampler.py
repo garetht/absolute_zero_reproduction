@@ -11,7 +11,7 @@ from model.args import AZRArgs
 
 
 def generate_with_logprobs_2(model: AutoModelForCausalLM,
-                             tokenizer: AutoTokenizer,
+                             tokenizer: PreTrainedTokenizerFast,
                              prompts: List[str],
                              args: AZRArgs
                              ) -> Tuple[Int[torch.Tensor, "batch max_new_tokens"],
@@ -46,28 +46,40 @@ Float[torch.Tensor, "batch max_new_tokens d_vocab"], Int[torch.Tensor, "batch ma
                                max_new_tokens=args.max_response_length,
                                use_cache=True,
                                do_sample=True,
-                               top_p=args.top_p,
-                               temperature=args.temperature)
+                               top_p=args.rollout_top_p,
+                               temperature=args.rollout_temperature)
 
     # note this may consume a lot of memory
     # might need to do this in chunks
-    logits = model(input_ids).logits[:, prompt_len - 1:-1]
+    logits = model(input_ids).logits
+
+    print(f"{logits.shape=}")
+    print(f"{prompt_len=}")
+
+    logits = logits[:, prompt_len - 1:-1]
+
+    print(f"{logits.shape=}")
+
     logprobs = torch.log_softmax(logits, dim=-1)
     completion_ids = input_ids[:, prompt_len:]
 
     # logprobs_per_token = eindex(logprobs[:, :-1], completion_ids[:, 1:], "b s [b s] -> b s")
     logprobs_per_token = torch.gather(logprobs, dim=-1, index=completion_ids.unsqueeze(-1)).squeeze(-1)
 
-    eos_mask = (ids == tokenizer.eos_token_id)
+    eos_mask = (completion_ids == tokenizer.eos_token_id)
     eos_positions = torch.argmax(eos_mask.int(), dim=-1)
     # Handle cases where no EOS token is found (argmax returns 0 even if no match)
     no_eos_mask = ~eos_mask.any(dim=-1)
-    eos_positions[no_eos_mask] = ids.shape[1]  # Use sequence length if no EOS found
+    eos_positions[no_eos_mask] = completion_ids.shape[1]  # Use sequence length if no EOS found
 
     # Generate attention mask that pays attention to everything up to EOS token (vectorized)
-    batch_size, seq_len = ids.shape
-    position_indices = torch.arange(seq_len, device=ids.device).unsqueeze(0).expand(batch_size, -1)
+    batch_size, seq_len = completion_ids.shape
+    position_indices = torch.arange(seq_len, device=completion_ids.device).unsqueeze(0).expand(batch_size, -1)
     attention_mask = (position_indices <= eos_positions.unsqueeze(1)).int()
+
+    print(f"{logprobs.shape=}")
+    print(f"{logprobs_per_token.shape=}")
+    print(f"{attention_mask.shape=}")
 
     return completion_ids, logprobs, logprobs_per_token, attention_mask
 

@@ -155,7 +155,7 @@ def generate_response_bulk_with_grads(
     Int[torch.Tensor, "batch_size max_response_len d_vocab"],
 ]:
     completion_ids, all_logprobs, logprobs_per_token, attention_masks = generate_with_logprobs_2(
-        args, model, tokenizer, prompts
+        model, tokenizer, prompts, args
     )
 
     return all_logprobs, logprobs_per_token, completion_ids, attention_masks

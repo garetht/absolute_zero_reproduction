@@ -305,6 +305,8 @@ class AZRTrainer:
 
                 # Fill tensor for this role across all task types (but only the problem's specific task type matters)
                 for mb_idx, problem in enumerate(mini_batch.samples):
+                    print(f"{all_logprobs.shape=}")
+                    print(f"{new_logprobs.shape=}")
                     new_logprobs[role.value, problem.task_type.value, mb_idx] = all_logprobs[mb_idx]
                     new_attention_masks[role.value, problem.task_type.value, mb_idx] = attention_masks[mb_idx]
 
