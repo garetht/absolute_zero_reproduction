@@ -50,6 +50,9 @@ def solve_modular_inverse(p: Optional[int] = None, x: Optional[int] = None, y: O
         raise ValueError("At most one of p, x, y can be None")
 
     if x is not None and p is not None:
+        if not is_prime(p):
+            return set()
+
         # Compute modular inverse of x mod p
         result = pow(x, -1, p)
         if verbose:

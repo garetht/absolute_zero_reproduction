@@ -17,7 +17,7 @@ from custom_types import MiniBatch, TaskType, Role, IOPair, Answer, Problem
 from model.args import AZRArgs
 from model.compute.advantages import compute_advantages
 from model.compute.reward import compute_r_total
-from model.inference import generate_response, generate_response_bulk, remove_dvocab_from_logprobs, \
+from model.inference import generate_response, generate_response_bulk, \
     generate_response_bulk_with_grads
 from model.eval.baselines import run_baseline_evaluation_prime_samples
 from utils.string_formatting import validate_proposer_formatting_and_correctness, \
