@@ -1,4 +1,6 @@
 # %%
+import re
+
 from custom_types import Problem, TaskType
 from utils.string_formatting import create_solver_prompt, extract_boxed_number, \
     validate_solver_formatting_and_correctness
@@ -226,13 +228,29 @@ def reward_fn_char_count(generated_sample: list[str], char: str = ".") -> Float[
     """
     return t.tensor([item.count(char) for item in generated_sample], device=device, dtype=t.float)
 
+import math
+
+def validate_largeness(text: str) -> float:
+    numbers = re.findall(r'-?\d+(?:\.\d+)?', text)
+    converted_numbers = []
+    for num in numbers:
+        if '.' in num:
+            converted_numbers.append(math.log(float(num)))
+        else:
+            converted_numbers.append(math.log(int(num)))
+
+    converted_numbers = [num if num > 0 else -0.1 for num in converted_numbers]
+
+    return max(converted_numbers) if converted_numbers else -0.1
+
+
 def reward_fn_solver(generated_sample: list[str]) -> Float[Tensor, "batch"]:
     """
     Reward function (counting number of instances of a particular character), evaluated on the generated samples. The
     return type should be a tensor of floats.
     """
     rewards = [
-        validate_solver_formatting_and_correctness(response, TaskType.DEDUCTION, PROBLEM).reward
+        validate_largeness(response)
         for response in generated_sample
     ]
     print(f"{rewards=}")
