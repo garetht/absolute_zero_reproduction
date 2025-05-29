@@ -4,7 +4,7 @@ from transformers import AutoModelForCausalLM, BatchEncoding
 from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
 
 from constants import DEVICE
-from david.sampler import generate_with_logprobs
+from david.sampler import generate_with_logprobs, generate_with_logprobs_2
 from model.args import AZRArgs
 from utils.debug_grads import debug_tensor_grads
 
@@ -132,7 +132,7 @@ def generate_response_bulk(
     if actual_length < args.max_response_length:
         padding_length = args.max_response_length - actual_length
         logprobs_padding = torch.zeros(
-            (logprobs.shape[0], padding_length, logprobs.shape[2]),
+            (logprobs.shape[0], padding_length),
             dtype=logprobs.dtype,
             device=logprobs.device
         )
@@ -154,7 +154,7 @@ def generate_response_bulk_with_grads(
     Int[torch.Tensor, "batch_size max_response_len"],
     Int[torch.Tensor, "batch_size max_response_len d_vocab"],
 ]:
-    completion_ids, all_logprobs, logprobs_per_token, attention_masks = generate_with_logprobs(
+    completion_ids, all_logprobs, logprobs_per_token, attention_masks = generate_with_logprobs_2(
         args, model, tokenizer, prompts
     )
 
