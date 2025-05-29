@@ -17,7 +17,8 @@ from custom_types import MiniBatch, TaskType, Role, IOPair, Answer, Problem
 from model.args import AZRArgs
 from model.compute.advantages import compute_advantages
 from model.compute.reward import compute_r_total
-from model.inference import generate_response, generate_response_bulk, remove_dvocab_from_logprobs
+from model.inference import generate_response, generate_response_bulk, \
+    generate_response_bulk_with_grads
 from model.eval.baselines import run_baseline_evaluation_prime_samples
 from utils.string_formatting import validate_proposer_formatting_and_correctness, \
     create_problem_from_answer, validate_single_response, CHECK_MAP
@@ -76,8 +77,8 @@ class AZRTrainer:
         self.run_name = run_name
 
     def compute_azr_objective(self, advantages: Float[torch.Tensor, "role task minibatch_size"],
-                              new_logprobs: Float[torch.Tensor, "role task minibatch_size seq_len"],
-                              new_sample_ids: Int[torch.Tensor, "role task minibatch_size seq_len"],
+                              new_logprobs: Float[torch.Tensor, "role task minibatch_size seq_len d_vocab"],
+                              completion_ids: Float[torch.Tensor, "role task minibatch_size seq_len"],
                               minibatch: MiniBatch) -> Float[torch.Tensor, ""]:
         """
         Compute the AZR training objective.
@@ -87,13 +88,20 @@ class AZRTrainer:
         """
         # compute the importance ratio using logprobs and sample_ids
         # using the new sample_ids and the old logprobs, get the logprobs from the old policy for the new sample_ids
-        old_logprobs = minibatch.logprobs.gather(-1, new_sample_ids.unsqueeze(-1)).squeeze(
+
+        new_logprobs = new_logprobs.gather(-1, minibatch.sample_ids.unsqueeze(-1).to(torch.int64)).squeeze(
             -1)  # shape: (role, task, minibatch_size, seq_len)
+
+        old_logprobs = minibatch.logprobs
+
         importance_ratio = (new_logprobs - old_logprobs).exp()  # shape: (role, task, minibatch_size, seq_len)
 
         # Apply attention masks to zero out padded positions
         attention_masks = minibatch.attention_masks.float()  # shape: (role, task, minibatch_size, seq_len)
         masked_importance_ratio = importance_ratio * attention_masks
+
+        print(f"{advantages.shape=}")
+        print(f"{masked_importance_ratio.shape=}")
 
         non_clipped = advantages * masked_importance_ratio  # shape: (role, task, minibatch_size, seq_len, )
         # compute the clipped objective
@@ -108,6 +116,8 @@ class AZRTrainer:
         else:
             return torch.tensor(0.0, device=objective_per_position.device)  # Fallback if no valid positions
 
+    # Ensure gradients are not computed
+    @torch.no_grad()
     def rollout_phase(self) -> Float[torch.Tensor, "role task batch_size"]:
         """
         Execute the rollout phase of AZR training.
@@ -123,7 +133,6 @@ class AZRTrainer:
 
         for batch_idx in range(self.args.batch_size):
             induction_problem: Problem = self.mega_buffer.sample_from_buffer(num_to_sample=1)[0]
-            print(induction_problem)
 
             # INDUCTION
             valid_pairs, induction_logprobs, induction_sample_ids, induction_prompt_tokens, induction_answers, induction_attention_mask = self.generate_and_validate_io_pairs(
@@ -157,6 +166,11 @@ class AZRTrainer:
             # BEFORE SOLVING, WRITE LOGPROBS TO THE MEGA BUFFER AND PARTIAL REWARDS TO OUR TENSOR
             # write logprobs to the mega buffer
             # megabuffer.logprobs shape : (role task batch_size seq_len vocab_size)
+            print(f"{abduction_logprobs.shape=}")
+            print(f"{deduction_logprobs.shape=}")
+            print(f"{induction_logprobs.shape=}")
+            print(f"{self.mega_buffer.logprobs.shape=}")
+
             for idx, task_type in enumerate(TaskType):
                 match task_type:
                     case TaskType.ABDUCTION:
@@ -192,6 +206,8 @@ class AZRTrainer:
         for task_type in TaskType:
             problems: list[Problem] = self.mega_buffer.sample_from_buffer(num_to_sample=self.args.batch_size)
             task_prompts = [problem.get_prompt(Role.SOLVER) for problem in problems]
+            print(f"{task_prompts=}")
+            print(f"{len(problems)=}")
             responses, logprobs, sample_ids, prompt_ids, attention_masks = generate_response_bulk(self.args,
                                                                                                   self.training_model,
                                                                                                   self.tokenizer,
@@ -222,6 +238,8 @@ class AZRTrainer:
         response, logprobs, sample_ids, prompt_tokens, attention_mask = generate_response(self.args,
                                                                                           self.training_model,
                                                                                           self.tokenizer, prompt)
+
+        print(f"{response=}")
         # Note: prompt_tokens no longer needed since Problem caches prompts
         return response, logprobs, sample_ids, attention_mask
 
@@ -264,29 +282,29 @@ class AZRTrainer:
                 (len(Role), len(TaskType), self.args.minibatch_size, self.args.max_response_length, self.args.d_vocab),
                 device=DEVICE, dtype=self.args.dtype
             )
-            new_sample_ids = torch.zeros(
-                (len(Role), len(TaskType), self.args.minibatch_size, self.args.max_response_length),
-                device=DEVICE, dtype=torch.int
-            )
+
             new_attention_masks = torch.zeros(
                 (len(Role), len(TaskType), self.args.minibatch_size, self.args.max_response_length),
                 device=DEVICE, dtype=torch.int
             )
-            
+
             for role in Role:
                 prompts = [problem.get_prompt(role) for problem in mini_batch.samples]
-                _, logprobs, sample_ids, _, attention_masks = generate_response_bulk(
+                all_logprobs, logprobs, completion_ids = generate_response_bulk_with_grads(
                     self.args, self.training_model, self.tokenizer, prompts
                 )
+
+                print(f"{new_logprobs.shape=}")
+                print(f"{all_logprobs.shape=}")
+                print(f"{completion_ids.shape=}")
+
                 # Fill tensor for this role across all task types (but only the problem's specific task type matters)
                 for mb_idx, problem in enumerate(mini_batch.samples):
-                    new_logprobs[role.value, problem.task_type.value, mb_idx] = logprobs[mb_idx]
-                    new_sample_ids[role.value, problem.task_type.value, mb_idx] = sample_ids[mb_idx]
-                    new_attention_masks[role.value, problem.task_type.value, mb_idx] = attention_masks[mb_idx]
-            new_logprobs = remove_dvocab_from_logprobs(new_logprobs, new_sample_ids)
+                    new_logprobs[role.value, problem.task_type.value, mb_idx] = all_logprobs[mb_idx]
+                    # new_attention_masks[role.value, problem.task_type.value, mb_idx] = attention_masks[mb_idx]
+
             advantages = compute_advantages(self.args, all_rewards)  # shape role task minibatch_size
-            objective = self.compute_azr_objective(advantages, new_logprobs, new_sample_ids,
-                                                   mini_batch)
+            objective = self.compute_azr_objective(advantages, new_logprobs, completion_ids, mini_batch)
             self.optimizer.zero_grad()
             objective.backward()
             torch.nn.utils.clip_grad_norm_(self.training_model.parameters(), self.args.max_grad_norm)

@@ -341,17 +341,44 @@ def validate_single_response(str_response: str, config: dict) -> list[Answer]:
     # 3. Success
     return answers
 
-
 def create_problem_from_answer(answer: Answer, task_type: TaskType) -> Problem:
     """Create a Problem from an Answer object"""
-    assert answer.program is not None, "Answer must have a program (prime) defined"
+    assert answer.program is not None, "Answer must have a program (prime) defined"    # Initialize x and y
+    x = answer.input
+    y = answer.output    # Compute missing values based on task type
+    if task_type == TaskType.ABDUCTION:
+        # For abduction, we have y and p, need to compute x
+        if x is None and y is not None:
+            solutions = solve_modular_inverse(y=y, p=answer.program)
+            if solutions:
+                x = solutions.pop()
+    elif task_type == TaskType.DEDUCTION:
+        # For deduction, we have x and p, need to compute y
+        if y is None and x is not None:
+            solutions = solve_modular_inverse(x=x, p=answer.program)
+            if solutions:
+                y = solutions.pop()
+    elif task_type == TaskType.INDUCTION:
+        # For induction, we should have both x and y already
+        # But if we're missing the prime, we can't create a valid problem
+        pass    
+
     return Problem(
         prime=answer.program,
-        x_list=[answer.input] if answer.input is not None else [],
-        y_list=[answer.output] if answer.output is not None else [], 
+        x_list=[x],
+        y_list=[y],
         task_type=task_type
     )
 
+# def create_problem_from_answer(answer: Answer, task_type: TaskType) -> Problem:
+#     """Create a Problem from an Answer object"""
+#     assert answer.program is not None, "Answer must have a program (prime) defined"
+#     return Problem(
+#         prime=answer.program,
+#         x_list=[answer.input] if answer.input is not None else [],
+#         y_list=[answer.output] if answer.output is not None else [], 
+#         task_type=task_type
+#     )
 
 def validate_solver_formatting_and_correctness(response: str, task_type: TaskType, sample: Problem) -> Answer:
     parsed_number = extract_boxed_number(response)
