@@ -4,7 +4,7 @@ from utils.string_formatting import create_solver_prompt, extract_boxed_number, 
     validate_solver_formatting_and_correctness
 
 LOW_GPU_MEM = False
-BASE_MODEL = "Qwen/Qwen2.5-3B-Instruct"
+BASE_MODEL = "Qwen/Qwen2.5-1.5B-Instruct"
 
 # %%
 
@@ -84,7 +84,7 @@ class RLHFArgs:
 
     # Base model & sampling arguments
     base_model: str = BASE_MODEL
-    gen_len: int = 40
+    gen_len: int = 35
     temperature: float = 1.0
     top_k: int = 10
     prefix: str = create_solver_prompt(PROBLEM)
