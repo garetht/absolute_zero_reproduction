@@ -82,9 +82,10 @@ class Evaluator:
         if extracted_answer is not None:
             # Check if answers are equivalent modulo prime
             if problem.blank == "p":
-                is_correct = (
-                                     problem.x * problem.y
-                             ) % extracted_answer == 1 and is_prime(extracted_answer)
+                if extracted_answer > 0:
+                    is_correct = (
+                                        problem.x * problem.y
+                                ) % extracted_answer == 1 and is_prime(extracted_answer)
             else:
                 is_correct = (extracted_answer % problem.prime) == (
                         correct_answer % problem.prime
@@ -157,7 +158,7 @@ class Evaluator:
 
         # Calculate total number of batches for progress tracking
         total_batches = (len(problems) + self.batch_size - 1) // self.batch_size
-
+        
         # Process problems in batches with progress bar
         for batch_idx, i in enumerate(range(0, len(problems), self.batch_size)):
             batch_problems = problems[i: i + self.batch_size]

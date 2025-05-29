@@ -12,7 +12,8 @@ from model.eval.prime_inversion import generate_problems, PRIMES
 
 def run_baseline_evaluation_prime_samples(args: AZRArgs, model: AutoModelForCausalLM,
                                           tokenizer: AutoTokenizer,
-                                          problems: list[Problem]) -> EvaluationResults:
+                                          problems: list[Problem],
+                                          verbose: bool=False) -> EvaluationResults:
     """
     This function takes problems and then performs baseline evaluation using the specified model
      and parameters.
@@ -25,8 +26,9 @@ def run_baseline_evaluation_prime_samples(args: AZRArgs, model: AutoModelForCaus
     """
 
     print("running baseline eval!")
-    for problem in problems:
-        print(str(problem))
+    if verbose:
+        for problem in problems:
+            print(str(problem))
 
     return evaluate_model(
         args,
@@ -81,7 +83,7 @@ if __name__ == "__main__":
     parser.add_argument("--model", type=str, default="Qwen/Qwen2.5-0.5B-Instruct", help="HuggingFace model name")
     parser.add_argument("--d-vocab", type=int, default=151_646, help="Vocabulary size of the model")
     parser.add_argument("--num_problems", type=int, default=20, help="Number of problems to generate")
-    parser.add_argument("--max-new-tokens", type=int, default=1024, help="Maximum number of new tokens to generate per response")
+    parser.add_argument("--max-new-tokens", type=int, default=, help="Maximum number of new tokens to generate per response")
     parser.add_argument("--seed", type=int, default=RANDOM_SEED, help="Random seed for reproducibility")
     parser.add_argument("--minibatch-size", type=int, default=8, help="MiniBatch size for inference (product with number of minibatches equals batch size)")
     parser.add_argument("--num-minibatches", type=int, default=4, help="Number of MiniBatches size for inference (product with minibatch size equals batch size)")
@@ -95,6 +97,8 @@ if __name__ == "__main__":
         max_response_length=args.max_new_tokens,
         seed=args.seed,
     )
+
+    azr_args.batch_size = azr_args.n_minibatches * azr_args.minibatch_size
 
     baseline_evaluation_results = run_baseline_evaluation_random_problems(
         args=azr_args,
