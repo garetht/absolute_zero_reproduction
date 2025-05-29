@@ -235,9 +235,9 @@ def validate_largeness(text: str) -> float:
     converted_numbers = []
     for num in numbers:
         if '.' in num:
-            converted_numbers.append(math.log(math.log(float(num))))
+            converted_numbers.append(math.log(float(num)))
         else:
-            converted_numbers.append(math.log(math.log(int(num))))
+            converted_numbers.append(math.log(int(num)))
 
     converted_numbers = [num if num > 0 else -0.1 for num in converted_numbers]
 
@@ -742,7 +742,7 @@ class RLHFTrainer:
 
 if MAIN:
     # Testing your setup: kl_coef=0.0 (see dropdown above the previous code block for explanation)
-    args = RLHFArgs(use_wandb=False, kl_coef=0.0, total_phases=30, warmup_steps=0, reward_fn=reward_fn_solver)
+    args = RLHFArgs(use_wandb=False, kl_coef=0.0, total_phases=30, warmup_steps=0, reward_fn=reward_fn_char_count)
     trainer = RLHFTrainer(args)
     trainer.train()
 
