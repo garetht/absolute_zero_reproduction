@@ -6,7 +6,7 @@ from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
 from constants import DEVICE
 from david.sampler import generate_with_logprobs
 from model.args import AZRArgs
-
+from utils.debug_grads import debug_tensor_grads
 
 
 def generate_without_grads(model: torch.nn.Module, inputs: BatchEncoding, tokenizer: PreTrainedTokenizerFast, max_new_tokens: int, device: torch.device) -> \
@@ -157,6 +157,8 @@ def generate_response_bulk_with_grads(
     completion_ids, all_logprobs, logprobs_per_token = generate_with_logprobs(
         args, model, tokenizer, prompts
     )
+
+    debug_tensor_grads(all_logprobs, "all_logprobs")
 
     return all_logprobs, logprobs_per_token, completion_ids # , attention mask
 
