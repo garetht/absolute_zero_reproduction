@@ -4,6 +4,7 @@ from transformers import AutoModelForCausalLM, BatchEncoding
 from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
 
 from constants import DEVICE
+from david.sampler import generate_with_logprobs
 from model.args import AZRArgs
 
 
@@ -18,27 +19,12 @@ def generate_without_grads(model: torch.nn.Module, inputs: BatchEncoding, tokeni
             pad_token_id=tokenizer.pad_token_id,
             return_dict_in_generate=True,
             output_scores=True,
-            use_cache=True
+            use_cache=True,
         )
         generated_ids = outputs.sequences[:, inputs.input_ids.shape[1] :]
-        logits = torch.stack(outputs.scores, dim=0).transpose(0, 1)  # (batch_size, actual_length, vocab_size)
 
-        return generated_ids, logits
-
-
-# completions = tokenizer.batch_decode(input_ids)
-# print(completions)
-#
-# logits = model(input_ids).logits
-# # %%
-# logits.shape
-# logprobs = torch.log_softmax(logits[:, 3:], dim=-1)
-# print(logprobs.shape)
-#
-# print(input_ids[:, 3:].shape)
-# eindex(logprobs, input_ids[:, 3:], "b s [b s] -> b s")
-# # %%
-# print(logits)
+        # TODO: need to slice this?
+        return generated_ids, outputs.scores[-1]
 
 
 # returns the str response and the logprobs for the response
@@ -92,6 +78,8 @@ def generate_response_bulk(
     generated_ids, generated_logits = generate_without_grads(
         model, inputs, tokenizer, args.max_response_length, DEVICE
     )
+    print("Received responses from model: generated logits")
+    print(generated_logits)
 
     # Extract generated tokens (excluding input tokens), shape (batch_size, actual_length)
     actual_length = generated_ids.shape[1]
@@ -158,25 +146,15 @@ def generate_response_bulk_with_grads(
         prompts: list[str],
 ) -> tuple[
     Float[torch.Tensor, "batch_size max_response_len d_vocab"],
+    Float[torch.Tensor, "batch_size max_response_len"],
+    Int[torch.Tensor, "batch_size max_response_len"],
     Int[torch.Tensor, "batch_size max_response_len"],
 ]:
-    responses, logprobs, generated_ids, input_ids, attention_masks = generate_response_bulk(
+    completion_ids, all_logprobs, logprobs_per_token = generate_with_logprobs(
         args, model, tokenizer, prompts
     )
 
-    logits = model(generated_ids).logits[:, args.max_prompt_length-1:-1]
-    logprobs = torch.log_softmax(logits, dim=-1)
-
-    completion_ids = input_ids[:, args.max_prompt_length:]
-
-    # logprobs_per_token = eindex(logprobs, completion_ids, "b s [b s] -> b s")
-    logprobs_per_token = torch.gather(logprobs, dim=-1, index=completion_ids.unsqueeze(-1)).squeeze(-1)
-
-    print(f"generate_response_bulk_with_grads")
-    print(f"{logprobs_per_token.shape=}")
-    print(f"{attention_masks.shape=}")
-
-    return logprobs_per_token, attention_masks
+    return all_logprobs, logprobs_per_token, completion_ids # , attention mask
 
 
 # def remove_dvocab_from_logprobs(

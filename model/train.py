@@ -1,14 +1,12 @@
+import torch
+import wandb
+from transformers import AutoTokenizer, AutoModelForCausalLM
+
+from buffer.base_buff import MegaBuffer
+from constants import MODEL_NAME, DEVICE
 from custom_types import Role, TaskType
 from model.args import AZRArgs
 from model.trainer import AZRTrainer
-from transformers import AutoTokenizer, AutoModelForCausalLM
-import torch
-import wandb
-
-from constants import MODEL_NAME, DEVICE
-from custom_types import Role, TaskType
-
-from buffer.base_buff import MegaBuffer
 from utils.mocks.mock_transformer import MockAutoModelForCausalLM
 
 
@@ -22,7 +20,7 @@ def main():
         model = MockAutoModelForCausalLM()
     else:
         model = AutoModelForCausalLM.from_pretrained(MODEL_NAME, device_map=DEVICE)
-        
+
     args = AZRArgs(
         wandb_project_name=wandb_project_name,
         use_wandb=use_wandb,
@@ -53,7 +51,6 @@ def main():
                 len(TaskType),
                 args.batch_size,
                 args.max_response_length,
-                args.d_vocab,
             ),
             device=DEVICE,
             dtype=args.dtype,
