@@ -138,76 +138,69 @@ class AZRTrainer:
         proposer_format_correctness_rewards = torch.zeros((len(TaskType), self.args.batch_size), device=DEVICE)
         all_rewards = torch.zeros((len(Role), len(TaskType), self.args.batch_size), device=DEVICE)
 
+        # Sample problems for each task type (batch_size problems each)
+        induction_problems = self.mega_buffer.sample_from_buffer(num_to_sample=self.args.batch_size)
+        abduction_problems = self.mega_buffer.sample_from_buffer(num_to_sample=self.args.batch_size)
+        deduction_problems = self.mega_buffer.sample_from_buffer(num_to_sample=self.args.batch_size)
+
+        # BATCH ALL PROPOSER CALLS FOR MASSIVE PARALLELIZATION
+        
+        # Collect prompts for each task type
+        induction_prompts = [problem.get_prompt(Role.PROPOSER) for problem in induction_problems]
+        abduction_prompts = [problem.get_prompt(Role.PROPOSER) for problem in abduction_problems]
+        deduction_prompts = [problem.get_prompt(Role.PROPOSER) for problem in deduction_problems]
+
+        # Generate responses in batches (3 bulk calls instead of 3*batch_size individual calls)
+        induction_responses, induction_logprobs_bulk, induction_sample_ids_bulk, _, induction_attention_masks_bulk = generate_response_bulk(
+            self.args, self.training_model, self.tokenizer, induction_prompts)
+        abduction_responses, abduction_logprobs_bulk, abduction_sample_ids_bulk, _, abduction_attention_masks_bulk = generate_response_bulk(
+            self.args, self.training_model, self.tokenizer, abduction_prompts)
+        deduction_responses, deduction_logprobs_bulk, deduction_sample_ids_bulk, _, deduction_attention_masks_bulk = generate_response_bulk(
+            self.args, self.training_model, self.tokenizer, deduction_prompts)
+
+        # Process responses and validation
         for batch_idx in range(self.args.batch_size):
-            induction_problem: Problem = self.mega_buffer.sample_from_buffer(num_to_sample=1)[0]
-
-            # INDUCTION
-            valid_pairs, induction_logprobs, induction_sample_ids, induction_prompt_tokens, induction_answers, induction_attention_mask = self.generate_and_validate_io_pairs(
-                induction_problem,
-                self.args.n_samples_to_estimate_task_accuracy)
-
+            # INDUCTION - process individual response from batch
+            induction_response = induction_responses[batch_idx]
+            induction_answers = validate_single_response(induction_response, CHECK_MAP[TaskType.INDUCTION])
+            valid_answers = [a for a in induction_answers if a.is_valid]
+            valid_pairs = [IOPair(input_str=e.input, output_str=e.output) for e in valid_answers]
+            
             if len(valid_pairs) > 0:
-                problem = create_problem_from_io_pairs(induction_problem.prime, valid_pairs)
+                problem = create_problem_from_io_pairs(induction_problems[batch_idx].prime, valid_pairs)
                 self.mega_buffer.buffer.append(problem)
 
-            # ABDUCTION and DEDUCTION
-            abduction_response, abduction_logprobs, abduction_sample_ids, abduction_attention_mask = self.propose_task(
-                TaskType.ABDUCTION)
-            deduction_response, deduction_logprobs, deduction_sample_ids, deduction_attention_mask = self.propose_task(
-                TaskType.DEDUCTION)
+            # ABDUCTION and DEDUCTION - validate responses
+            abduction_answer = validate_proposer_formatting_and_correctness(abduction_responses[batch_idx], TaskType.ABDUCTION)
+            deduction_answer = validate_proposer_formatting_and_correctness(deduction_responses[batch_idx], TaskType.DEDUCTION)
 
-            # validate the responses have correct formatting, and run,  create answer objects during this proccess
-            abduction_answer = validate_proposer_formatting_and_correctness(abduction_response, TaskType.ABDUCTION)
-            deduction_answer = validate_proposer_formatting_and_correctness(deduction_response, TaskType.DEDUCTION)
-
-            # if the abduction answer has valid formatting
+            # Add valid problems to buffer
             if abduction_answer.reward >= 0:
                 problem = create_problem_from_answer(abduction_answer, TaskType.ABDUCTION)
                 self.mega_buffer.buffer.append(problem)
-
-            # if the deduction answer has valid formatting
             if deduction_answer.reward >= 0:
                 problem = create_problem_from_answer(deduction_answer, TaskType.DEDUCTION)
                 self.mega_buffer.buffer.append(problem)
 
-            # BEFORE SOLVING, WRITE LOGPROBS TO THE MEGA BUFFER AND PARTIAL REWARDS TO OUR TENSOR
-            # write logprobs to the mega buffer
-            # megabuffer.logprobs shape : (role task batch_size seq_len vocab_size)
-            print(f"{abduction_logprobs.shape=}")
-            print(f"{deduction_logprobs.shape=}")
-            print(f"{induction_logprobs.shape=}")
-            print(f"{self.mega_buffer.logprobs.shape=}")
-
-            for idx, task_type in enumerate(TaskType):
-                match task_type:
-                    case TaskType.ABDUCTION:
-                        self.mega_buffer.logprobs[
-                            Role.PROPOSER.value, task_type.value, batch_idx, ...] = abduction_logprobs
-                        # write the rewards to proposer_format_correctness_rewards
-                        proposer_format_correctness_rewards[task_type.value, batch_idx] = abduction_answer.reward
-                        self.mega_buffer.sample_ids[
-                            Role.PROPOSER.value, task_type.value, batch_idx, ...] = abduction_sample_ids
-                        self.mega_buffer.attention_masks[
-                            Role.PROPOSER.value, task_type.value, batch_idx, ...] = abduction_attention_mask
-                    case TaskType.DEDUCTION:
-                        self.mega_buffer.logprobs[
-                            Role.PROPOSER.value, task_type.value, batch_idx, ...] = deduction_logprobs
-
-                        proposer_format_correctness_rewards[task_type.value, batch_idx] = deduction_answer.reward
-                        self.mega_buffer.sample_ids[
-                            Role.PROPOSER.value, task_type.value, batch_idx, ...] = deduction_sample_ids
-                        self.mega_buffer.attention_masks[
-                            Role.PROPOSER.value, task_type.value, batch_idx, ...] = deduction_attention_mask
-                    case TaskType.INDUCTION:
-                        self.mega_buffer.logprobs[
-                            Role.PROPOSER.value, task_type.value, batch_idx, ...] = induction_logprobs
-                        # TODO: maybe not mean??
-                        proposer_format_correctness_rewards[task_type.value, batch_idx] = torch.tensor(
-                            [a.reward for a in induction_answers], device=DEVICE).mean()
-                        self.mega_buffer.sample_ids[
-                            Role.PROPOSER.value, task_type.value, batch_idx, ...] = induction_sample_ids
-                        self.mega_buffer.attention_masks[
-                            Role.PROPOSER.value, task_type.value, batch_idx, ...] = induction_attention_mask
+            # Store logprobs and rewards in buffer
+            # ABDUCTION
+            self.mega_buffer.logprobs[Role.PROPOSER.value, TaskType.ABDUCTION.value, batch_idx, ...] = abduction_logprobs_bulk[batch_idx]
+            proposer_format_correctness_rewards[TaskType.ABDUCTION.value, batch_idx] = abduction_answer.reward
+            self.mega_buffer.sample_ids[Role.PROPOSER.value, TaskType.ABDUCTION.value, batch_idx, ...] = abduction_sample_ids_bulk[batch_idx]
+            self.mega_buffer.attention_masks[Role.PROPOSER.value, TaskType.ABDUCTION.value, batch_idx, ...] = abduction_attention_masks_bulk[batch_idx]
+            
+            # DEDUCTION
+            self.mega_buffer.logprobs[Role.PROPOSER.value, TaskType.DEDUCTION.value, batch_idx, ...] = deduction_logprobs_bulk[batch_idx]
+            proposer_format_correctness_rewards[TaskType.DEDUCTION.value, batch_idx] = deduction_answer.reward
+            self.mega_buffer.sample_ids[Role.PROPOSER.value, TaskType.DEDUCTION.value, batch_idx, ...] = deduction_sample_ids_bulk[batch_idx]
+            self.mega_buffer.attention_masks[Role.PROPOSER.value, TaskType.DEDUCTION.value, batch_idx, ...] = deduction_attention_masks_bulk[batch_idx]
+            
+            # INDUCTION
+            self.mega_buffer.logprobs[Role.PROPOSER.value, TaskType.INDUCTION.value, batch_idx, ...] = induction_logprobs_bulk[batch_idx]
+            proposer_format_correctness_rewards[TaskType.INDUCTION.value, batch_idx] = torch.tensor(
+                [a.reward for a in induction_answers], device=DEVICE).mean()
+            self.mega_buffer.sample_ids[Role.PROPOSER.value, TaskType.INDUCTION.value, batch_idx, ...] = induction_sample_ids_bulk[batch_idx]
+            self.mega_buffer.attention_masks[Role.PROPOSER.value, TaskType.INDUCTION.value, batch_idx, ...] = induction_attention_masks_bulk[batch_idx]
 
         # SOLVE PROBLEMS
         for task_type in TaskType:
@@ -239,33 +232,35 @@ class AZRTrainer:
         # Store rewards in buffer for sampling
         self.mega_buffer.rewards = all_rewards
 
-    def propose_task(self, task_type: TaskType) -> tuple[
-        str, Float[torch.Tensor, "seq_len vocab_size"], Int[torch.Tensor, "seq_len"], Int[torch.Tensor, "seq_len"]]:
-        problem = self.mega_buffer.sample_from_buffer(num_to_sample=1)[0]
-        prompt = problem.get_prompt(Role.PROPOSER)
-        response, logprobs, sample_ids, prompt_tokens, attention_mask = generate_response(self.args,
-                                                                                          self.training_model,
-                                                                                          self.tokenizer, prompt)
-
-        print(f"{response=}")
-        # Note: prompt_tokens no longer needed since Problem caches prompts
-        return response, logprobs, sample_ids, attention_mask
-
-    def generate_and_validate_io_pairs(self, program: Problem, num_io_pairs: int) -> tuple[
-        list[IOPair], Float[torch.Tensor, "seq_len vocab_size"], Int[torch.Tensor, "seq_len"], Int[
-            torch.Tensor, "max_prompt_len"], list[Answer], Int[torch.Tensor, "seq_len"]]:
-        induction_prompt = program.get_prompt(Role.PROPOSER)
-        response, logprobs, sample_ids, prompt_tokens, attention_mask = generate_response(self.args,
-                                                                                          self.training_model,
-                                                                                          self.tokenizer,
-                                                                                          induction_prompt)
-
-        answers = validate_single_response(response, CHECK_MAP[TaskType.INDUCTION])
-        valid_answers = [a for a in answers if a.is_valid]
-
-        io_pairs = [IOPair(input_str=e.input, output_str=e.output) for e in valid_answers]
-        # Note: prompt_tokens no longer needed since Problem caches prompts
-        return io_pairs, logprobs, sample_ids, prompt_tokens, answers, attention_mask
+    # DEPRECATED: These functions are replaced by batched approach in rollout_phase
+    # Keeping them commented out for now in case we need to revert
+    # def propose_task(self, task_type: TaskType) -> tuple[
+    #     str, Float[torch.Tensor, "seq_len vocab_size"], Int[torch.Tensor, "seq_len"], Int[torch.Tensor, "seq_len"]]:
+    #     problem = self.mega_buffer.sample_from_buffer(num_to_sample=1)[0]
+    #     prompt = problem.get_prompt(Role.PROPOSER)
+    #     response, logprobs, sample_ids, prompt_tokens, attention_mask = generate_response(self.args,
+    #                                                                                       self.training_model,
+    #                                                                                       self.tokenizer, prompt)
+    #
+    #     print(f"{response=}")
+    #     # Note: prompt_tokens no longer needed since Problem caches prompts
+    #     return response, logprobs, sample_ids, attention_mask
+    #
+    # def generate_and_validate_io_pairs(self, program: Problem, num_io_pairs: int) -> tuple[
+    #     list[IOPair], Float[torch.Tensor, "seq_len vocab_size"], Int[torch.Tensor, "seq_len"], Int[
+    #         torch.Tensor, "max_prompt_len"], list[Answer], Int[torch.Tensor, "seq_len"]]:
+    #     induction_prompt = program.get_prompt(Role.PROPOSER)
+    #     response, logprobs, sample_ids, prompt_tokens, attention_mask = generate_response(self.args,
+    #                                                                                       self.training_model,
+    #                                                                                       self.tokenizer,
+    #                                                                                       induction_prompt)
+    #
+    #     answers = validate_single_response(response, CHECK_MAP[TaskType.INDUCTION])
+    #     valid_answers = [a for a in answers if a.is_valid]
+    #
+    #     io_pairs = [IOPair(input_str=e.input, output_str=e.output) for e in valid_answers]
+    #     # Note: prompt_tokens no longer needed since Problem caches prompts
+    #     return io_pairs, logprobs, sample_ids, prompt_tokens, answers, attention_mask
 
     def learning_phase(self) -> None:
         """
