@@ -152,15 +152,13 @@ def generate_response_bulk_with_grads(
     Float[torch.Tensor, "batch_size max_response_len d_vocab"],
     Float[torch.Tensor, "batch_size max_response_len"],
     Int[torch.Tensor, "batch_size max_response_len"],
-    Int[torch.Tensor, "batch_size max_response_len"],
+    Int[torch.Tensor, "batch_size max_response_len d_vocab"],
 ]:
-    completion_ids, all_logprobs, logprobs_per_token = generate_with_logprobs(
+    completion_ids, all_logprobs, logprobs_per_token, attention_masks = generate_with_logprobs(
         args, model, tokenizer, prompts
     )
 
-    debug_tensor_grads(all_logprobs, "all_logprobs")
-
-    return all_logprobs, logprobs_per_token, completion_ids # , attention mask
+    return all_logprobs, logprobs_per_token, completion_ids, attention_masks
 
 
 # def remove_dvocab_from_logprobs(
