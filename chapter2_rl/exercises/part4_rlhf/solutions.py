@@ -251,6 +251,7 @@ def reward_fn_solver(generated_sample: list[str]) -> Float[Tensor, "batch"]:
         validate_solver_formatting_and_correctness(response, TaskType.DEDUCTION, PROBLEM).reward
         for response in generated_sample
     ]
+    print(f"{rewards=}")
 
     return t.tensor(rewards, device=device, dtype=t.float)
 
