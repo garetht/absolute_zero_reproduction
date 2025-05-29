@@ -33,13 +33,13 @@ class AZRArgs:
     prepend_bos: bool = True
 
     # Model Configuration
-    max_prompt_length: int = 6144
-    max_response_length: int = 128
+    max_prompt_length: int = 128
+    max_response_length: int = 256
     seed_batch_factor: int = 4
     max_programs: int = 16384
 
     # Training Settings
-    lr: float = 1e-6
+    lr: float = 1e-5 # dave made me change this
     grad_clip: float = 1.0
     total_steps: int = 500
 
@@ -52,8 +52,8 @@ class AZRArgs:
     k_references: int = 6
     n_samples_to_estimate_task_accuracy: int = 8
     # our params
-    n_minibatches: int = 8
-    minibatch_size: int = 4
+    n_minibatches: int = 4
+    minibatch_size: int = 2
     batch_size = minibatch_size * n_minibatches
     clip_ratio: float = 0.2
     eps: float = 1e-5
