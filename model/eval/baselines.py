@@ -3,6 +3,7 @@ import random
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+from constants import RANDOM_SEED
 from custom_types import Problem, EvaluationResults, TaskType
 from model.args import AZRArgs
 from model.eval.evaluator import evaluate_model_from_name, evaluate_model
@@ -77,17 +78,25 @@ def run_baseline_evaluation_random_problems(args: AZRArgs, model_name: str,
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Evaluate language models on modular inverse problems",
-        epilog="Usage example: PYTHONPATH=. python model/eval/baselines.py --model=Qwen/Qwen2.5-3B-Instruct --batch_size=10"
+        epilog="Usage example: PYTHONPATH=. python model/eval/baselines.py --model=Qwen/Qwen2.5-3B-Instruct --minibatch-size=8 --num-minibatches=4"
     )
     parser.add_argument("--model", type=str, default="Qwen/Qwen2.5-0.5B-Instruct", help="HuggingFace model name")
+    parser.add_argument("--d-vocab", type=int, default=151_646, help="Vocabulary size of the model")
     parser.add_argument("--num_problems", type=int, default=20, help="Number of problems to generate")
-    parser.add_argument("--max-new-tokens", type=int, default=500, help="Number of problems to generate")
-    parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
-    parser.add_argument("--batch_size", type=int, default=1, help="Batch size for inference")
+    parser.add_argument("--max-new-tokens", type=int, default=1024, help="Maximum number of new tokens to generate per response")
+    parser.add_argument("--seed", type=int, default=RANDOM_SEED, help="Random seed for reproducibility")
+    parser.add_argument("--minibatch-size", type=int, default=8, help="MiniBatch size for inference (product with number of minibatches equals batch size)")
+    parser.add_argument("--num-minibatches", type=int, default=4, help="Number of MiniBatches size for inference (product with minibatch size equals batch size)")
 
     args = parser.parse_args()
-
-    azr_args = AZRArgs(batch_size=args.batch_size, max_response_length=args.max_new_tokens)
+    
+    azr_args = AZRArgs(
+        d_vocab=args.d_vocab,
+        n_minibatches=args.num_minibatches, 
+        minibatch_size=args.minibatch_size, 
+        max_response_length=args.max_new_tokens,
+        seed=args.seed,
+    )
 
     baseline_evaluation_results = run_baseline_evaluation_random_problems(
         args=azr_args,
