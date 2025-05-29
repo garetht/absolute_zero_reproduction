@@ -1,4 +1,4 @@
-from jaxtyping import Int
+from jaxtyping import Int, Float
 import numpy
 from torch import Tensor
 import torch
@@ -33,6 +33,7 @@ class MegaBuffer:
         logprobs: Int[Tensor, "role task batch_size max_response_len"],
         sample_ids: Int[Tensor, "role task batch_size max_response_len"],
         attention_masks: Int[Tensor, "role task batch_size max_response_len"] = None,
+        rewards: Float[Tensor, "role task batch_size"] = None,
     ):
         self.args = args
         self.seed_buffer: list[Problem] = []
@@ -43,6 +44,12 @@ class MegaBuffer:
             self.attention_masks = torch.ones_like(sample_ids)
         else:
             self.attention_masks = attention_masks
+        # Initialize rewards if not provided
+        if rewards is None:
+            self.rewards = torch.zeros((len(Role), len(TaskType), args.batch_size), 
+                                     dtype=logprobs.dtype, device=logprobs.device)
+        else:
+            self.rewards = rewards
         # batch_size is the index of the sample in the buffer, same for any role task combo
         self.buffer: list[Problem] = []
 
@@ -70,21 +77,28 @@ class MegaBuffer:
                 (len(Role), len(TaskType), self.args.minibatch_size, self.args.max_response_length),
                 dtype=torch.int, device=self.attention_masks.device
             )
+            minibatch_rewards = torch.zeros(
+                (len(Role), len(TaskType), self.args.minibatch_size),
+                dtype=self.rewards.dtype, device=self.rewards.device
+            )
             
             # Fill data for each problem in minibatch
             for mb_idx, (problem, is_from_buffer) in enumerate(zip(minibatch_problems, minibatch_buffer_mask)):
                 if is_from_buffer:
-                    # Use pre-calculated logprobs from rollout
+                    # Use pre-calculated data from rollout
                     buffer_idx = indices[mb_idx]  # Original index in buffer
                     minibatch_sample_ids[:, :, mb_idx] = self.sample_ids[:, :, buffer_idx]
                     minibatch_logprobs[:, :, mb_idx] = self.logprobs[:, :, buffer_idx]
                     minibatch_attention_masks[:, :, mb_idx] = self.attention_masks[:, :, buffer_idx]
+                    minibatch_rewards[:, :, mb_idx] = self.rewards[:, :, buffer_idx]
                 else:
                     # Calculate on-the-fly for seed problem
                     if model is not None and tokenizer is not None:
                         self._calculate_seed_logprobs(problem, mb_idx, minibatch_sample_ids, 
                                                     minibatch_logprobs, minibatch_attention_masks, 
                                                     model, tokenizer)
+                        # For seed problems, set rewards to zero (they don't have computed rewards)
+                        minibatch_rewards[:, :, mb_idx] = 0.0
             
             out.append(
                 MiniBatch(
@@ -92,6 +106,7 @@ class MegaBuffer:
                     sample_ids=minibatch_sample_ids,
                     logprobs=minibatch_logprobs,
                     attention_masks=minibatch_attention_masks,
+                    rewards=minibatch_rewards,
                 )
             )
         return out
@@ -102,6 +117,7 @@ class MegaBuffer:
         self.logprobs = torch.zeros_like(self.logprobs, device=self.logprobs.device, requires_grad=True)
         self.sample_ids = torch.zeros_like(self.sample_ids, device=self.sample_ids.device, dtype=torch.int64)
         self.attention_masks = torch.zeros_like(self.attention_masks, device=self.attention_masks.device)
+        self.rewards = torch.zeros_like(self.rewards, device=self.rewards.device)
 
     def _get_combined_problems_with_mask(self) -> tuple[list[Problem], list[bool]]:
         """Combine buffer and seed_buffer problems to reach batch_size. Returns (problems, is_from_buffer_mask)"""

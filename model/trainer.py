@@ -118,7 +118,7 @@ class AZRTrainer:
 
     # Ensure gradients are not computed
     @torch.no_grad()
-    def rollout_phase(self) -> Float[torch.Tensor, "role task batch_size"]:
+    def rollout_phase(self) ->  None:
         """
         Execute the rollout phase of AZR training.
         
@@ -229,7 +229,8 @@ class AZRTrainer:
                                                                            task_type,
                                                                            r_format_proposer)
 
-        return all_rewards  # shape: (role, task, batch_size)
+        # Store rewards in buffer for sampling
+        self.mega_buffer.rewards = all_rewards
 
     def propose_task(self, task_type: TaskType) -> tuple[
         str, Float[torch.Tensor, "seq_len vocab_size"], Int[torch.Tensor, "seq_len"], Int[torch.Tensor, "seq_len"]]:
@@ -271,7 +272,7 @@ class AZRTrainer:
         """
 
         self.mega_buffer.reset()
-        all_rewards = self.rollout_phase()
+        self.rollout_phase()
 
         # now do minibatch policy updates
         for mini_batch in self.mega_buffer.get_minibatches(self.training_model, self.tokenizer):
@@ -303,7 +304,7 @@ class AZRTrainer:
                     new_logprobs[role.value, problem.task_type.value, mb_idx] = all_logprobs[mb_idx]
                     # new_attention_masks[role.value, problem.task_type.value, mb_idx] = attention_masks[mb_idx]
 
-            advantages = compute_advantages(self.args, all_rewards)  # shape role task minibatch_size
+            advantages = compute_advantages(self.args, mini_batch.rewards)  # shape role task minibatch_size
             objective = self.compute_azr_objective(advantages, new_logprobs, completion_ids, mini_batch)
             self.optimizer.zero_grad()
             objective.backward()
@@ -325,7 +326,7 @@ class AZRTrainer:
                 reward_logs = {}
                 for role_idx, role in enumerate(['proposer', 'solver']):
                     for task_idx, task in enumerate(['abduction', 'deduction', 'induction']):
-                        mean_reward = all_rewards[role_idx, task_idx].mean().item()
+                        mean_reward = self.mega_buffer.rewards[role_idx, task_idx].mean().item()
                         reward_logs[f"reward/{role}_{task}"] = mean_reward
 
                 wandb.log(reward_logs, step=self.step)

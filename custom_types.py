@@ -190,3 +190,4 @@ class MiniBatch:
     sample_ids: Int[Tensor, "role task minibatch_size seq_len"]
     logprobs: Float[Tensor, "role task minibatch_size max_response_length"]
     attention_masks: Int[Tensor, "role task minibatch_size seq_len"]
+    rewards: Float[Tensor, "role task minibatch_size"]
