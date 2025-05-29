@@ -80,16 +80,21 @@ Float[torch.Tensor, "batch max_new_tokens d_vocab"], Int[torch.Tensor, "batch ma
     # Pad/truncate to max_response_length for consistent tensor shapes
     target_length = args.max_response_length
     current_length = logprobs_per_token.size(1)
-    
+
+    print(f"before : {logprobs.shape=}")
+    print(f"before : {logprobs_per_token.shape=}")
+    print(f"before : {attention_mask.shape=}")
+
     if current_length < target_length:
         # Pad with zeros
         pad_size = target_length - current_length
-        logprobs_per_token = torch.nn.functional.pad(logprobs_per_token, (0, 0, 0, pad_size), value=0)
+        logprobs = torch.nn.functional.pad(logprobs, (0, 0, 0, pad_size), value=0)
+        logprobs_per_token = torch.nn.functional.pad(logprobs_per_token, (0, pad_size), value=0)
         attention_mask = torch.nn.functional.pad(attention_mask, (0, pad_size), value=0)
         completion_ids = torch.nn.functional.pad(completion_ids, (0, pad_size), value=0)
     elif current_length > target_length:
         # Truncate to target length
-        logprobs_per_token = logprobs_per_token[:, :target_length]
+        logprobs = logprobs[:, :target_length]
         attention_mask = attention_mask[:, :target_length]
         completion_ids = completion_ids[:, :target_length]
 
