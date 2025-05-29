@@ -77,6 +77,22 @@ Float[torch.Tensor, "batch max_new_tokens d_vocab"], Int[torch.Tensor, "batch ma
     position_indices = torch.arange(seq_len, device=completion_ids.device).unsqueeze(0).expand(batch_size, -1)
     attention_mask = (position_indices <= eos_positions.unsqueeze(1)).int()
 
+    # Pad/truncate to max_response_length for consistent tensor shapes
+    target_length = args.max_response_length
+    current_length = logprobs_per_token.size(1)
+    
+    if current_length < target_length:
+        # Pad with zeros
+        pad_size = target_length - current_length
+        logprobs_per_token = torch.nn.functional.pad(logprobs_per_token, (0, 0, 0, pad_size), value=0)
+        attention_mask = torch.nn.functional.pad(attention_mask, (0, pad_size), value=0)
+        completion_ids = torch.nn.functional.pad(completion_ids, (0, pad_size), value=0)
+    elif current_length > target_length:
+        # Truncate to target length
+        logprobs_per_token = logprobs_per_token[:, :target_length]
+        attention_mask = attention_mask[:, :target_length]
+        completion_ids = completion_ids[:, :target_length]
+
     print(f"{logprobs.shape=}")
     print(f"{logprobs_per_token.shape=}")
     print(f"{attention_mask.shape=}")
