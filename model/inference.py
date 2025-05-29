@@ -164,14 +164,13 @@ def generate_response_bulk_with_grads(
         args, model, tokenizer, prompts
     )
 
-    logits = model(generated_ids).logits[:, args.max_prompt_length:]
+    logits = model(generated_ids).logits[:, args.max_prompt_length-1:-1]
     logprobs = torch.log_softmax(logits, dim=-1)
 
-    completion_ids = input_ids[:, args.max_prompt_length + 1:]
+    completion_ids = input_ids[:, args.max_prompt_length:]
 
     # logprobs_per_token = eindex(logprobs, completion_ids, "b s [b s] -> b s")
     logprobs_per_token = torch.gather(logprobs, dim=-1, index=completion_ids.unsqueeze(-1)).squeeze(-1)
-
 
     print(f"generate_response_bulk_with_grads")
     print(f"{logprobs_per_token.shape=}")
