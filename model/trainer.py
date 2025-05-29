@@ -14,7 +14,7 @@ from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
 from buffer.base_buff import BaseBuffer, MegaBuffer
 from constants import DEVICE
 from custom_types import MiniBatch, TaskType, Role, IOPair, Answer, Problem
-from david.sampler import generate_with_logprobs
+from david.sampler_2 import generate_with_logprobs
 from model.args import AZRArgs
 from model.compute.advantages import compute_advantages
 from model.compute.reward import compute_r_total
@@ -262,7 +262,7 @@ class AZRTrainer:
             for role in Role:
                 prompts = [problem.get_prompt(role) for problem in mini_batch.samples]
                 completion_ids, attention_masks, logprobs = generate_with_logprobs(
-                    self.args, self.training_model, self.tokenizer, prompts
+                     self.training_model, self.tokenizer, prompts, self.args
                 )
 
                 print(f"{logprobs.shape=}")
