@@ -66,7 +66,7 @@ class RLHFArgs:
 
     # Duration of different phases
     total_phases: int = 100
-    batch_size: int = 4
+    batch_size: int = 8
     num_minibatches: int = 4
     batches_per_learning_phase: int = 2
 
