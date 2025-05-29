@@ -49,6 +49,9 @@ class Evaluator:
 
         start_time = time.time()
         # Use generate_response_bulk instead of model.generate
+
+        print(f"{len(batch_prompts)=}")
+
         responses, logprobs, gen_ids, prompt_ids, attention_masks = generate_response_bulk(
             self.args,
             self.model,

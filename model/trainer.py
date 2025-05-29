@@ -79,8 +79,7 @@ class AZRTrainer:
         self.run_name = run_name
 
     def compute_azr_objective(self, advantages: Float[torch.Tensor, "role task minibatch_size"],
-                              new_logprobs: Float[torch.Tensor, "role task minibatch_size seq_len d_vocab"],
-                              completion_ids: Float[torch.Tensor, "role task minibatch_size seq_len"],
+                              new_logprobs: Float[torch.Tensor, "role task minibatch_size seq_len"],
                               minibatch: MiniBatch) -> Float[torch.Tensor, ""]:
         """
         Compute the AZR training objective.
@@ -90,9 +89,6 @@ class AZRTrainer:
         """
         # compute the importance ratio using logprobs and sample_ids
         # using the new sample_ids and the old logprobs, get the logprobs from the old policy for the new sample_ids
-
-        new_logprobs = new_logprobs.gather(-1, minibatch.sample_ids.unsqueeze(-1).to(torch.int64)).squeeze(
-            -1)  # shape: (role, task, minibatch_size, seq_len)
 
         old_logprobs = minibatch.logprobs
 
@@ -254,7 +250,7 @@ class AZRTrainer:
             # first do a forward pass on current policy to get the logprobs used in importance ratio
             # generate for both roles since loss uses both proposer and solver logprobs
             new_logprobs = torch.zeros(
-                (len(Role), len(TaskType), self.args.minibatch_size, self.args.max_response_length, self.args.d_vocab),
+                (len(Role), len(TaskType), self.args.minibatch_size, self.args.max_response_length),
                 device=DEVICE, dtype=self.args.dtype
             )
 
@@ -265,24 +261,24 @@ class AZRTrainer:
 
             for role in Role:
                 prompts = [problem.get_prompt(role) for problem in mini_batch.samples]
-                all_logprobs, logprobs, completion_ids, attention_masks = generate_response_bulk_with_grads(
+                completion_ids, attention_masks, logprobs = generate_with_logprobs(
                     self.args, self.training_model, self.tokenizer, prompts
                 )
 
+                print(f"{logprobs.shape=}")
+
                 # Fill tensor for this role across all task types (but only the problem's specific task type matters)
                 for mb_idx, problem in enumerate(mini_batch.samples):
-                    print(f"{all_logprobs.shape=}")
-                    print(f"{new_logprobs.shape=}")
-                    new_logprobs[role.value, problem.task_type.value, mb_idx] = all_logprobs[mb_idx]
+                    new_logprobs[role.value, problem.task_type.value, mb_idx] = logprobs
                     new_attention_masks[role.value, problem.task_type.value, mb_idx] = attention_masks[mb_idx]
 
             advantages = compute_advantages(self.args, mini_batch.rewards)  # shape role task minibatch_size
-            objective = self.compute_azr_objective(advantages, new_logprobs, completion_ids, mini_batch)
+            objective = self.compute_azr_objective(advantages, new_logprobs, mini_batch)
 
-            self.optimizer.zero_grad()
             objective.backward()
             torch.nn.utils.clip_grad_norm_(self.training_model.parameters(), self.args.max_grad_norm)
             self.optimizer.step()
+            self.optimizer.zero_grad()
 
             # Evaluate after gradient update
             eval_results = run_baseline_evaluation_prime_samples(
