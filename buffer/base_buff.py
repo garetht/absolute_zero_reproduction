@@ -60,7 +60,7 @@ class MegaBuffer:
             # Initialize tensors for this minibatch
             minibatch_sample_ids = torch.zeros(
                 (len(Role), len(TaskType), self.args.minibatch_size, self.args.max_response_length),
-                dtype=torch.int, device=self.sample_ids.device
+                dtype=torch.int64, device=self.sample_ids.device
             )
             minibatch_logprobs = torch.zeros(
                 (len(Role), len(TaskType), self.args.minibatch_size, self.args.max_response_length),
@@ -100,7 +100,7 @@ class MegaBuffer:
         self.seed_buffer.extend(self.buffer)
         self.buffer = []
         self.logprobs = torch.zeros_like(self.logprobs, device=self.logprobs.device, requires_grad=True)
-        self.sample_ids = torch.zeros_like(self.sample_ids, device=self.sample_ids.device)
+        self.sample_ids = torch.zeros_like(self.sample_ids, device=self.sample_ids.device, dtype=torch.int64)
         self.attention_masks = torch.zeros_like(self.attention_masks, device=self.attention_masks.device)
 
     def _get_combined_problems_with_mask(self) -> tuple[list[Problem], list[bool]]:
