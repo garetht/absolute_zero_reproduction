@@ -84,7 +84,7 @@ class RLHFArgs:
 
     # Base model & sampling arguments
     base_model: str = BASE_MODEL
-    gen_len: int = 150
+    gen_len: int = 50
     temperature: float = 1.0
     top_k: int = 10
     prefix: str = create_solver_prompt(PROBLEM)
