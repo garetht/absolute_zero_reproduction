@@ -1,5 +1,7 @@
 # %%
-
+from custom_types import Problem, TaskType
+from utils.string_formatting import create_solver_prompt, extract_boxed_number, \
+    validate_solver_formatting_and_correctness
 
 LOW_GPU_MEM = False
 BASE_MODEL = "Qwen/Qwen2.5-0.5B-Instruct" if LOW_GPU_MEM else "gpt2-medium"
@@ -45,6 +47,12 @@ MAIN = __name__ == "__main__"
 
 # %%
 
+PROBLEM = Problem(
+    prime=7,
+    x_list=[2],
+    y_list=[4],
+    task_type=TaskType.DEDUCTION,
+)
 
 @dataclass
 class RLHFArgs:
@@ -79,7 +87,7 @@ class RLHFArgs:
     gen_len: int = 30
     temperature: float = 1.0
     top_k: int = 10
-    prefix: str = "This is"
+    prefix: str = create_solver_prompt(PROBLEM)
     prepend_bos: bool = True
 
     # RLHF-specific arguments
@@ -233,6 +241,18 @@ def reward_fn_char_count(generated_sample: list[str], char: str = ".") -> Float[
     return type should be a tensor of floats.
     """
     return t.tensor([item.count(char) for item in generated_sample], device=device, dtype=t.float)
+
+def reward_fn_solver(generated_sample: list[str]) -> Float[Tensor, "batch"]:
+    """
+    Reward function (counting number of instances of a particular character), evaluated on the generated samples. The
+    return type should be a tensor of floats.
+    """
+    rewards = [
+        validate_solver_formatting_and_correctness(response, TaskType.DEDUCTION, PROBLEM).reward
+        for response in generated_sample
+    ]
+
+    return t.tensor(rewards, device=device, dtype=t.float)
 
 
 if MAIN:
@@ -797,7 +817,7 @@ if MAIN:
 # %%
 
 if MAIN:
-    args = RLHFArgs(use_wandb=True, reward_fn=reward_fn_char_count)  # CUDA errors? reduce batch_size or gen_len
+    args = RLHFArgs(use_wandb=False, reward_fn=reward_fn_char_count)  # CUDA errors? reduce batch_size or gen_len
     trainer = RLHFTrainer(args)
     trainer.train()
 
