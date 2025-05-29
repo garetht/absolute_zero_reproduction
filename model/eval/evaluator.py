@@ -6,10 +6,9 @@ import torch
 from transformers import AutoModelForCausalLM, PreTrainedTokenizerFast, AutoTokenizer
 from typing import List
 
+from chapter2_rl.exercises.part4_rlhf.solutions import RLHFArgs
 from custom_types import ProblemResult, Problem, EvaluationResults
-from model.args import AZRArgs
 from model.eval.prime_inversion import is_prime
-from model.inference import generate_response_bulk
 from utils.string_formatting import extract_boxed_number, create_solver_prompt
 
 
@@ -18,7 +17,7 @@ class Evaluator:
 
     def __init__(
             self,
-            args: AZRArgs,
+            args: RLHFArgs,
             model: AutoModelForCausalLM,
             tokenizer: PreTrainedTokenizerFast,
     ):
@@ -212,7 +211,7 @@ class Evaluator:
 
 
 def evaluate_model_from_name(
-        args: AZRArgs,
+        args: RLHFArgs,
         model_name: str,
         problems: List[Problem],
 ) -> EvaluationResults:
@@ -249,7 +248,7 @@ def evaluate_model_from_name(
 
 
 def evaluate_model(
-        args: AZRArgs,
+        args: RLHFArgs,
         model: AutoModelForCausalLM,
         tokenizer: PreTrainedTokenizerFast,
         problems: List[Problem],

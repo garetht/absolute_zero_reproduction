@@ -1,7 +1,7 @@
 import random
 from typing import Optional
 
-from custom_types import Problem, TaskType, Answer
+from custom_types import Problem, TaskType
 
 
 def is_prime(n: int) -> bool:
