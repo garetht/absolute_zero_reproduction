@@ -316,19 +316,12 @@ class ReplayMinibatch:
     logprobs: Float[Tensor, "minibatch_size gen_len"]
     advantages: Float[Tensor, "minibatch_size gen_len"]
     returns: Float[Tensor, "minibatch_size gen_len"]
-    ref_logits: Float[Tensor, "minibatch_size seq_len d_vocab"]
 
 
 class ReplayMemory:
-    def __init__(
-        self,
-        args: RLHFArgs,
-        sample_ids: Float[Tensor, "batch_size seq_len"],
-        logprobs: Float[Tensor, "batch_size gen_len"],
-        advantages: Float[Tensor, "batch_size gen_len"],
-        values: Float[Tensor, "batch_size seq_len"],
-        ref_logits: Float[Tensor, "batch_size seq_len d_vocab"],
-    ):
+    def __init__(self, args: RLHFArgs, sample_ids: Float[Tensor, "batch_size seq_len"],
+                 logprobs: Float[Tensor, "batch_size gen_len"], advantages: Float[Tensor, "batch_size gen_len"],
+                 values: Float[Tensor, "batch_size seq_len"]):
         """
         Initializes the replay memory, with all the data generated from the rollout phase at once.
 
@@ -337,9 +330,6 @@ class ReplayMemory:
         computed for all tokens.
         """
 
-        assert ref_logits.ndim == 3
-        assert ref_logits.shape[0] == args.batch_size
-        assert sample_ids.shape == values.shape == ref_logits.shape[:2]
         assert advantages.shape == logprobs.shape == (args.batch_size, args.gen_len)
 
         self.args = args
@@ -347,7 +337,6 @@ class ReplayMemory:
         self.logprobs = logprobs
         self.advantages = advantages
         self.values = values
-        self.ref_logits = ref_logits
 
     def get_minibatches(self) -> list[ReplayMinibatch]:
         """
@@ -366,7 +355,6 @@ class ReplayMemory:
                         logprobs=self.logprobs[indices],
                         advantages=self.advantages[indices],
                         returns=returns[indices],
-                        ref_logits=self.ref_logits[indices],
                     )
                 )
 
@@ -376,42 +364,6 @@ class ReplayMemory:
 # %%
 
 
-def calc_kl_penalty(
-    logits: Float[Tensor, "minibatch_size gen_len d_vocab"],
-    ref_logits: Float[Tensor, "minibatch_size gen_len d_vocab"],
-    kl_coef: float,
-    gen_len: int,
-) -> Float[Tensor, ""]:
-    """
-    Computes the KL divergence between the logits and the reference logits, scaled
-    by the penalty function. This is used to stop the learned policy from diverging
-    too much from the original reference model's policy.
-
-    logits:
-        The logits for all generated tokens (under the new model).
-    ref_logits:
-        The logits for the generated tokens (under the reference model).
-    kl_coef:
-        The coefficient of the KL penalty.
-    prefix_len:
-        The length of the prefix to ignore when computing the KL divergence.
-    """
-    assert (
-        logits.shape[1] == ref_logits.shape[1] == gen_len
-    ), "Should pass in logits and ref_logits for all generated tokens only, i.e. [:, -gen_len-1: -1]"
-
-    ref_logprobs = ref_logits.log_softmax(-1)
-    logprobs = logits.log_softmax(-1)
-    probs = logprobs.exp()
-
-    kl_div = (probs * (logprobs - ref_logprobs)).sum(-1)
-
-    return kl_coef * kl_div.mean()
-
-
-if MAIN:
-    tests.test_calc_kl_penalty(calc_kl_penalty)
-    tests.test_calc_kl_penalty_stability(calc_kl_penalty)
 
 # %%
 
@@ -610,7 +562,6 @@ def get_optimizer_and_scheduler(args: RLHFArgs, model: TransformerWithValueHead)
 
 class RLHFTrainer:
     model: TransformerWithValueHead
-    ref_model: HookedTransformer
     memory: ReplayMemory  # we'll set this during rollout
 
     def __init__(self, args: RLHFArgs):
@@ -619,7 +570,6 @@ class RLHFTrainer:
         self.run_name = f"{args.wandb_project_name}__seed{args.seed}__{time.strftime('%Y%m%d-%H%M%S')}"
 
         self.model = TransformerWithValueHead(args.base_model).to(device).train()
-        self.ref_model = HookedTransformer.from_pretrained(args.base_model).to(device).eval()
         self.optimizer, self.scheduler = get_optimizer_and_scheduler(self.args, self.model)
         self.prefix_len = len(self.model.base_model.to_str_tokens(self.args.prefix, prepend_bos=self.args.prepend_bos))
 
@@ -650,13 +600,10 @@ class RLHFTrainer:
             values[:, gen_len_slice], minibatch.returns, self.args.vf_coef, self.args.gen_len
         )
         entropy_bonus = calc_entropy_bonus(logits[:, gen_len_slice], self.args.ent_coef, self.args.gen_len)
-        kl_penalty = calc_kl_penalty(
-            logits[:, gen_len_slice], minibatch.ref_logits[:, gen_len_slice], self.args.kl_coef, self.args.gen_len
-        )
 
         # Compute net objective function
         ppo_objective_fn = clipped_surrogate_objective - value_loss + entropy_bonus
-        total_objective_function = ppo_objective_fn - kl_penalty
+        total_objective_function = ppo_objective_fn
 
         # Log stuff
         with t.inference_mode():
@@ -705,7 +652,6 @@ class RLHFTrainer:
         # Generate logits from our model & reference model
         with t.inference_mode():
             logits, values = self.model(sample_ids)
-            ref_logits = self.ref_model(sample_ids)
 
         # Get the logprobs of the generated tokens
         logprobs = get_logprobs(logits, sample_ids, self.prefix_len)
@@ -723,20 +669,13 @@ class RLHFTrainer:
             wandb.log({"mean_reward": rewards_mean}, step=self.step)
 
         n_log_samples = min(3, self.args.batch_size)
-        ref_logprobs = get_logprobs(ref_logits[:n_log_samples], sample_ids[:n_log_samples], self.prefix_len).sum(-1)
-        headers = ["Reward", "Ref logprobs", "Sample"]
-        table_data = [[str(int(r)), f"{lp:.2f}", repr(s)] for r, lp, s in zip(rewards.tolist(), ref_logprobs, samples)]
+        headers = ["Reward", "Sample"]
+        table_data = [[str(int(r)), f"{lp:.2f}", repr(s)] for r, lp, s in zip(rewards.tolist(), samples)]
         table = tabulate(table_data, headers, tablefmt="simple_grid", maxcolwidths=[None, None, 90])
         print(f"Phase {self.phase+1:03}/{self.args.total_phases:03}, Mean reward: {rewards_mean:.4f}\n{table}\n")
 
-        return ReplayMemory(
-            args=self.args,
-            sample_ids=sample_ids,
-            logprobs=logprobs,
-            advantages=advantages,
-            values=values,
-            ref_logits=ref_logits,
-        )
+        return ReplayMemory(args=self.args, sample_ids=sample_ids, logprobs=logprobs, advantages=advantages,
+                            values=values)
 
     def learning_phase(self, memory: ReplayMemory) -> None:
         """
