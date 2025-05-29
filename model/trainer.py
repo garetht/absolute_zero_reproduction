@@ -299,14 +299,14 @@ class AZRTrainer:
 
             for role in Role:
                 prompts = [problem.get_prompt(role) for problem in mini_batch.samples]
-                all_logprobs, logprobs, completion_ids = generate_response_bulk_with_grads(
+                all_logprobs, logprobs, completion_ids, attention_masks = generate_response_bulk_with_grads(
                     self.args, self.training_model, self.tokenizer, prompts
                 )
 
                 # Fill tensor for this role across all task types (but only the problem's specific task type matters)
                 for mb_idx, problem in enumerate(mini_batch.samples):
                     new_logprobs[role.value, problem.task_type.value, mb_idx] = all_logprobs[mb_idx]
-                    # new_attention_masks[role.value, problem.task_type.value, mb_idx] = attention_masks[mb_idx]
+                    new_attention_masks[role.value, problem.task_type.value, mb_idx] = attention_masks[mb_idx]
 
             advantages = compute_advantages(self.args, mini_batch.rewards)  # shape role task minibatch_size
             objective = self.compute_azr_objective(advantages, new_logprobs, completion_ids, mini_batch)
