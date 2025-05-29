@@ -4,7 +4,7 @@ from utils.string_formatting import create_solver_prompt, extract_boxed_number, 
     validate_solver_formatting_and_correctness
 
 LOW_GPU_MEM = False
-BASE_MODEL = "phi-3"
+BASE_MODEL = "phi-2"
 
 # %%
 
