@@ -1,18 +1,62 @@
 import torch
 from jaxtyping import Float, Int
-from transformers import AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, BatchEncoding
 from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
 
 from constants import DEVICE
 from model.args import AZRArgs
 
 
+def generate_with_gradients(model: torch.nn.Module, inputs: BatchEncoding,
+                            tokenizer: PreTrainedTokenizerFast, max_new_tokens: int, device: torch.device) -> \
+        tuple[torch.Tensor, torch.Tensor]:
+    """Generate tokens using forward pass to maintain gradients"""
+    input_ids = inputs.input_ids.to(device)
+    attention_mask = inputs.attention_mask.to(device)
+
+    # Store all logits for gradient computation
+    all_logits = []
+
+    # Generation loop
+    for _ in range(max_new_tokens):
+        # Forward pass
+        outputs = model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            use_cache=True,  # Speed up generation
+            return_dict=True
+        )
+
+        # Store logits (keep gradients)
+        all_logits.append(outputs.logits[:, -1:, :])
+
+        # Get next token (greedy decoding)
+        next_token = outputs.logits[:, -1, :].argmax(dim=-1, keepdim=True)
+
+        # Append to sequence
+        input_ids = torch.cat([input_ids, next_token], dim=1)
+        attention_mask = torch.cat([
+            attention_mask,
+            torch.ones((attention_mask.shape[0], 1), device=device)
+        ], dim=1)
+
+        # # Stop if EOS token is generated
+        # if (next_token == tokenizer.eos_token_id).any():
+        #     break
+
+    # Concatenate all logits
+    generated_logits = torch.cat(all_logits, dim=1)
+    generated_ids = input_ids[:, inputs.input_ids.shape[1]:]
+
+    return generated_ids, generated_logits
+
+
 # returns the str response and the logprobs for the response
 def generate_response(
-    args: AZRArgs,
-    model: AutoModelForCausalLM,
-    tokenizer: PreTrainedTokenizerFast,
-    prompt: str,
+        args: AZRArgs,
+        model: AutoModelForCausalLM,
+        tokenizer: PreTrainedTokenizerFast,
+        prompt: str,
 ) -> tuple[
     str,
     Float[torch.Tensor, "max_response_len vocab_size"],
@@ -29,10 +73,10 @@ def generate_response(
 # for each prompt in the list, returns a tuple of lists: (list of str responses, list of logprobs tensors)
 # returns responses (list of strings), logprobs (of the gen responses), generated_ids (tokens of the generated response), inputs.input_ids (tokenized input prompts)
 def generate_response_bulk(
-    args: AZRArgs,
-    model: AutoModelForCausalLM,
-    tokenizer: PreTrainedTokenizerFast,
-    prompts: list[str],
+        args: AZRArgs,
+        model: AutoModelForCausalLM,
+        tokenizer: PreTrainedTokenizerFast,
+        prompts: list[str],
 ) -> tuple[
     list[str],
     Float[torch.Tensor, "batch_size max_response_len vocab_size"],
@@ -40,7 +84,6 @@ def generate_response_bulk(
     Int[torch.Tensor, "batch_size prompt_len"],
     Int[torch.Tensor, "batch_size max_response_len"],
 ]:
-
     print("=" * 80)
     print("Preparing to call model with prompts: ")
     for prompt in prompts:
@@ -56,30 +99,25 @@ def generate_response_bulk(
     )
 
     # Generate responses
-    outputs = model(
-        inputs.input_ids.to(DEVICE),
-        attention_mask=inputs.attention_mask.to(DEVICE),
-        max_new_tokens=args.max_response_length,
-        do_sample=False,  # Greedy decoding
-        pad_token_id=tokenizer.pad_token_id,
-        return_dict_in_generate=True,
-        output_scores=True,
+    _, generated_logits = generate_with_gradients(
+        model, inputs, tokenizer, args.max_response_length, DEVICE
     )
 
+
     # Extract generated tokens (excluding input tokens), shape (batch_size, actual_length)
-    generated_ids = outputs.logits.argmax(dim=-1)
+    generated_ids = generated_logits.argmax(dim=-1)
     actual_length = generated_ids.shape[1]
 
     # Decode responses
     responses = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-    
+
     # Pad generated_ids to max_response_length
     if actual_length < args.max_response_length:
         padding_length = args.max_response_length - actual_length
         padding = torch.full(
-            (generated_ids.shape[0], padding_length), 
-            tokenizer.pad_token_id, 
-            dtype=generated_ids.dtype, 
+            (generated_ids.shape[0], padding_length),
+            tokenizer.pad_token_id,
+            dtype=generated_ids.dtype,
             device=generated_ids.device
         )
         generated_ids = torch.cat([generated_ids, padding], dim=1)
@@ -87,11 +125,11 @@ def generate_response_bulk(
         # Truncate if longer than expected
         generated_ids = generated_ids[:, :args.max_response_length]
         actual_length = args.max_response_length
-    
+
     # Create attention masks to identify valid (non-padded) positions
     attention_masks = torch.zeros_like(generated_ids, dtype=torch.int)
     attention_masks[:, :actual_length] = 1
-    
+
     # If we have EOS tokens, mask everything after the first EOS in each sequence
     if tokenizer.eos_token_id is not None:
         # Find first EOS position in each sequence (only in valid region)
@@ -102,10 +140,10 @@ def generate_response_bulk(
             # Mask positions after first EOS (but keep the EOS token itself)  
             post_eos_mask = (eos_cumsum <= 1).int()
             attention_masks[:, :actual_length] = attention_masks[:, :actual_length] * post_eos_mask
-    
+
     # Process logits and pad to max_response_length
     # logits are these shape: (actual_length, batch_size, vocab_size) before transpose
-    logits = outputs.logits
+    logits = generated_logits
     logprobs = torch.log_softmax(logits, dim=-1)
     print("Receiving responses from model")
     for response in responses:
@@ -122,13 +160,13 @@ def generate_response_bulk(
         logprobs = torch.cat([logprobs, logprobs_padding], dim=1)
     elif actual_length > args.max_response_length:
         logprobs = logprobs[:, :args.max_response_length, :]
-    
+
     return responses, logprobs, generated_ids, inputs.input_ids, attention_masks
 
 
 def remove_dvocab_from_logprobs(
-    logprobs: Float[torch.Tensor, "role task batch_size max_response_len vocab_size"],
-    tokens: Int[torch.Tensor, "role task batch_size max_response_len"],
+        logprobs: Float[torch.Tensor, "role task batch_size max_response_len vocab_size"],
+        tokens: Int[torch.Tensor, "role task batch_size max_response_len"],
 ) -> Float[torch.Tensor, "role task batch_size max_response_len"]:
     """
     Extract log probabilities for generated tokens.
