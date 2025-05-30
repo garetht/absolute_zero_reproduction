@@ -19,6 +19,7 @@ from david.sampler import generate_with_logprobs
 from model.args import AZRArgs
 from model.compute.advantages import compute_advantages
 from model.compute.reward import compute_r_total
+from model.eval.prime_inversion import generate_problems, PRIMES
 from model.inference import generate_response, generate_response_bulk, \
     generate_response_bulk_with_grads
 from model.eval.baselines import run_baseline_evaluation_prime_samples
@@ -364,12 +365,16 @@ class AZRTrainer:
                     total_norm_after += param_norm ** 2
             total_norm_after = total_norm_after ** 0.5
             
-            self.optimizer.step()
-            self.optimizer.zero_grad()
+            # self.optimizer.step()
+            # self.optimizer.zero_grad()
 
             # Evaluate after gradient update
             eval_results = run_baseline_evaluation_prime_samples(
-                self.args, self.training_model, self.tokenizer, mini_batch.samples
+                self.args, self.training_model, self.tokenizer, generate_problems(
+                    n = self.args.minibatch_size,
+                    primes=PRIMES[5:12],
+                    seed=42
+                )
             )
             print(f"Minibatch accuracy: {eval_results['accuracy']:.2%}")
             total_accuracy += eval_results['accuracy']

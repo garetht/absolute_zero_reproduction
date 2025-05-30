@@ -187,7 +187,6 @@ class EvaluationResults(TypedDict):
     total_eval_time_seconds: float
     accuracy: float
 
-
 @dataclass
 class MiniBatch:
     samples: list[Problem]

@@ -1,7 +1,7 @@
 import argparse
 import random
 
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, PreTrainedTokenizerFast
 
 from constants import RANDOM_SEED
 from custom_types import Problem, EvaluationResults, TaskType
@@ -11,7 +11,7 @@ from model.eval.prime_inversion import generate_problems, PRIMES
 
 
 def run_baseline_evaluation_prime_samples(args: AZRArgs, model: AutoModelForCausalLM,
-                                          tokenizer: AutoTokenizer,
+                                          tokenizer: PreTrainedTokenizerFast,
                                           problems: list[Problem]) -> EvaluationResults:
     """
     This function takes problems and then performs baseline evaluation using the specified model
@@ -23,10 +23,6 @@ def run_baseline_evaluation_prime_samples(args: AZRArgs, model: AutoModelForCaus
     :param problems: Collection of problems to be evaluated
     :return: Dictionary containing evaluation results and metrics
     """
-
-
-
-
     return evaluate_model(
         args,
         model, tokenizer, problems
