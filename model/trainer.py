@@ -251,7 +251,7 @@ class AZRTrainer:
         # Notify completion of rollout phase
         tqdm.write("✅ Finished rollout phase")
 
-    def learning_phase(self) -> None:
+    def learning_phase(self) -> float:
         """
         Execute the learning phase of AZR training.
         
@@ -265,11 +265,11 @@ class AZRTrainer:
         self.mega_buffer.reset()
 
         self.rollout_phase()
-
+        tqdm.write("Starting learning phase...")
+        total_accuracy = 0.0
         # now do minibatch policy updates
         for mb_idx, mini_batch in tqdm(
-                enumerate(self.mega_buffer.get_minibatches(self.training_model, self.tokenizer)), desc="Learning | Minibatches",
-                start=1
+                list(enumerate(self.mega_buffer.get_minibatches(self.training_model, self.tokenizer))), desc="Learning | Minibatches"
                      ):
             self.step += 1
             # first do a forward pass on current policy to get the logprobs used in importance ratio
@@ -372,18 +372,12 @@ class AZRTrainer:
                 self.args, self.training_model, self.tokenizer, mini_batch.samples
             )
             print(f"Minibatch accuracy: {eval_results['accuracy']:.2%}")
-
+            total_accuracy += eval_results['accuracy']
             # Log metrics to wandb if enabled
             if self.args.use_wandb:
                 # Log accuracy
                 wandb.log({"minibatch_accuracy": eval_results['accuracy']}, step=self.step)
-                
-                # Log gradient norms
-                wandb.log({
-                    "gradient_norm_before_clip": total_norm_before,
-                    "gradient_norm_after_clip": total_norm_after,
-                    "objective": objective.item()
-                }, step=self.step)
+
 
                 # Log rewards by role and task type
                 reward_logs = {}
@@ -396,3 +390,9 @@ class AZRTrainer:
 
             # Inform about minibatch completion
             tqdm.write(f"✅ Completed minibatch {mb_idx} (global step {self.step})")
+        total_accuracy /= self.args.n_minibatches
+        tqdm.write(f"Average accuracy for learning phase: {total_accuracy:.2%}")
+        # write to wandb
+        if self.args.use_wandb:
+            wandb.log({"learning_phase_accuracy": total_accuracy}, step=self.step)
+        return total_accuracy
