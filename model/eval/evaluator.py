@@ -92,9 +92,6 @@ class Evaluator:
                         correct_answer % problem.prime
                 )
 
-        print(
-            f"""{"✅" if is_correct else "⛔"} | Problem {problem} | Model Response {extracted_answer}"""
-        )
 
         return {
             "problem": str(problem),

@@ -5,13 +5,13 @@ This module contains the AZRTrainer class and related utilities for training
 language models using the AZR methodology. It provides functionality for
 rollout phases, learning phases, and objective computation.
 """
+import gc
 import torch
 import wandb
 from jaxtyping import Float, Int
 from transformers import AutoModelForCausalLM
 from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
-from tqdm.auto import tqdm   # NEW
-
+from tqdm.auto import tqdm   # NEW 
 from buffer.base_buff import BaseBuffer, MegaBuffer
 from constants import DEVICE
 from custom_types import MiniBatch, TaskType, Role, IOPair, Answer, Problem
@@ -94,14 +94,6 @@ class AZRTrainer:
 
         old_logprobs = minibatch.logprobs
 
-        # Check for NaN/inf in inputs
-        if torch.isnan(new_logprobs).any() or torch.isinf(new_logprobs).any():
-            print(f"WARNING: NaN/inf detected in new_logprobs")
-            print(f"new_logprobs stats: min={new_logprobs.min()}, max={new_logprobs.max()}, mean={new_logprobs.mean()}")
-        
-        if torch.isnan(old_logprobs).any() or torch.isinf(old_logprobs).any():
-            print(f"WARNING: NaN/inf detected in old_logprobs")
-            print(f"old_logprobs stats: min={old_logprobs.min()}, max={old_logprobs.max()}, mean={old_logprobs.mean()}")
 
         # Clip the difference to prevent explosion
         logprob_diff = new_logprobs - old_logprobs
@@ -251,6 +243,9 @@ class AZRTrainer:
 
         # Notify completion of rollout phase
         tqdm.write("✅ Finished rollout phase")
+        
+        # Garbage collect after rollout to free temporary objects
+        gc.collect()
 
     def learning_phase(self) -> float:
         """
@@ -273,6 +268,10 @@ class AZRTrainer:
                 list(enumerate(self.mega_buffer.get_minibatches(self.training_model, self.tokenizer))), desc="Learning | Minibatches"
                      ):
             self.step += 1
+            
+            # Zero gradients at the start of each minibatch
+            self.optimizer.zero_grad()
+            
             # first do a forward pass on current policy to get the logprobs used in importance ratio
             # generate for both roles since loss uses both proposer and solver logprobs
             new_logprobs = torch.zeros(
@@ -302,11 +301,10 @@ class AZRTrainer:
                 if attention_masks.dim() == 1:  # (seq_len,) -> (1, seq_len)
                     attention_masks = attention_masks.unsqueeze(0)
 
-
                 
                 # Check for NaN/inf in logprobs
-                if torch.isnan(logprobs).any() or torch.isinf(logprobs).any():
-                    print(f"WARNING: NaN/inf detected in logprobs for {role}")
+                if torch.isnan(logprobs).any() :
+                    print(f"WARNING: NaN detected in logprobs for {role}")
                     print(f"logprobs stats: min={logprobs.min()}, max={logprobs.max()}, mean={logprobs.mean()}")
 
                 # Fill tensor for this role across all task types (but only the problem's specific task type matters)
@@ -318,27 +316,11 @@ class AZRTrainer:
             objective = self.compute_azr_objective(advantages, new_logprobs, mini_batch)
             
             # Check objective before backward
-            if torch.isnan(objective).any() or torch.isinf(objective).any():
-                print(f"ERROR: NaN/inf detected in objective: {objective}")
+            if torch.isnan(objective).any() :
+                print(f"ERROR: NaN detected in objective: {objective}")
                 print("Skipping this minibatch update")
                 continue
-            
-
-
-            # Log gradient norms before clipping
-            total_norm_before = 0.0
-            param_norms_before = []
-            for p in self.training_model.parameters():
-                if p.grad is not None:
-                    param_norm = p.grad.data.norm(2).item()
-                    param_norms_before.append(param_norm)
-                    total_norm_before += param_norm ** 2
-            total_norm_before = total_norm_before ** 0.5
-            
-
-            if total_norm_before > 100:
-                print(f"WARNING: Large gradient norm detected: {total_norm_before}")
-                print(f"Max param gradient norm: {max(param_norms_before)}")
+        
 
             objective.backward()
             
@@ -357,32 +339,30 @@ class AZRTrainer:
             
             torch.nn.utils.clip_grad_norm_(self.training_model.parameters(), self.args.max_grad_norm)
             
-            # Log gradient norms after clipping
-            total_norm_after = 0.0
-            for p in self.training_model.parameters():
-                if p.grad is not None:
-                    param_norm = p.grad.data.norm(2).item()
-                    total_norm_after += param_norm ** 2
-            total_norm_after = total_norm_after ** 0.5
-            
-            # self.optimizer.step()
+            self.optimizer.step()
             # self.optimizer.zero_grad()
+            del new_logprobs, new_attention_masks, advantages, objective
+            # Clear CUDA cache periodically to free memory
+            if mb_idx % 2 == 0:  # Every 2 minibatches
+                torch.cuda.empty_cache()
+                gc.collect()  # Also run garbage collection to free CPU memory
 
             # Evaluate after gradient update
-            eval_results = run_baseline_evaluation_prime_samples(
-                self.args, self.training_model, self.tokenizer, generate_problems(
-                    n = self.args.batch_size,
-                    primes=PRIMES[7:14],
-                    seed=self.args.seed
+            with torch.no_grad():
+                eval_results = run_baseline_evaluation_prime_samples(
+                    self.args, self.training_model, self.tokenizer, generate_problems(
+                        n = min(self.args.batch_size, 16),
+                        primes=PRIMES[7:14],
+                        seed=self.args.seed
+                    )
                 )
-            )
             print(f"Minibatch accuracy: {eval_results['accuracy']:.2%}")
             total_accuracy += eval_results['accuracy']
+            
             # Log metrics to wandb if enabled
             if self.args.use_wandb:
                 # Log accuracy
                 wandb.log({"minibatch_accuracy": eval_results['accuracy']}, step=self.step)
-
 
                 # Log rewards by role and task type
                 reward_logs = {}
@@ -395,6 +375,11 @@ class AZRTrainer:
 
             # Inform about minibatch completion
             tqdm.write(f"✅ Completed minibatch {mb_idx} (global step {self.step})")
+            
+        # Final cleanup after all minibatches
+        torch.cuda.empty_cache()
+        gc.collect()
+        
         total_accuracy /= self.args.n_minibatches
         tqdm.write(f"Average accuracy for learning phase: {total_accuracy:.2%}")
         # write to wandb

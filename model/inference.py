@@ -30,12 +30,16 @@ def generate_without_grads(model: torch.nn.Module, inputs: BatchEncoding, tokeni
         # OLD: scores = torch.cat(outputs.scores, dim=0)     # wrong shape
         # NEW: stack on a separate time axis (batch, seq_len, vocab)
         scores = torch.stack(outputs.scores, dim=1)           # (B, T, V)
+
         logprobs = torch.log_softmax(scores, dim=-1)          # same shape
+        
+
         # Gather the log-prob of each generated token
         logprobs_per_token = logprobs.gather(
             dim=-1,
             index=generated_ids.unsqueeze(-1)
         ).squeeze(-1)                                         # (B, T)
+
         # ------------------------------------------------------------------
 
         return generated_ids, logprobs_per_token
@@ -62,6 +66,7 @@ def generate_response(
 
 # for each prompt in the list, returns a tuple of lists: (list of str responses, list of logprobs tensors)
 # returns responses (list of strings), logprobs (of the gen responses), generated_ids (tokens of the generated response), inputs.input_ids (tokenized input prompts)
+@torch.no_grad()
 def generate_response_bulk(
         args: AZRArgs,
         model: AutoModelForCausalLM,

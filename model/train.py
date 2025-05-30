@@ -4,13 +4,14 @@ import os, tempfile
 import wandb                               # NEW
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from safetensors.torch import save_file   # NEW
-
+from tqdm import tqdm
 from buffer.base_buff import MegaBuffer
 from constants import CHECKPOINT_DIR, MODEL_NAME, DEVICE
 from custom_types import Role, TaskType
 from model.args import AZRArgs
 from model.trainer import AZRTrainer
 from utils.mocks.mock_transformer import MockAutoModelForCausalLM
+import gc  # Import garbage collector
 
 
 # ---------------------------------------------------------------------------
@@ -120,27 +121,40 @@ def main():
     # ---------- checkpoint bookkeeping ----------------------------------------
     best_accuracy = float("-inf")
     # --------------------------------------------------------------------------
-
-    for phase in range(args.total_phases):
+    epoch = 0
+    for phase in tqdm(range(args.total_phases), desc=f"Epoch {epoch+1}/{args.total_phases}"):
+        epoch += 1
+        
+        # Clear CUDA cache at the start of each epoch
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        
         phase_accuracy = trainer.learning_phase() or getattr(trainer,
                                                              "latest_accuracy",
                                                              0.0)
         if wandb_run:                       # log metrics
             wandb_run.log({"phase": phase, "accuracy": phase_accuracy})
 
-        # -------- save current checkpoint (temp) ------------------------------
-        save_model_checkpoint(model, current_ckpt_path)
-         # ----------------------------------------------------------------------
+        # # -------- save current checkpoint (temp) ------------------------------
+        # with torch.no_grad():  # Ensure no gradients during checkpoint save
+        #     save_model_checkpoint(model, current_ckpt_path)
+        #  # ----------------------------------------------------------------------
 
-        # -------- update best checkpoint --------------------------------------
-        if phase_accuracy > best_accuracy:
-            best_accuracy = phase_accuracy
-            save_model_checkpoint(model, best_ckpt_path)
+        # # -------- update best checkpoint --------------------------------------
+        # if phase_accuracy > best_accuracy:
+        #     best_accuracy = phase_accuracy
+        #     with torch.no_grad():  # Ensure no gradients during checkpoint save
+        #         save_model_checkpoint(model, best_ckpt_path)
          # ----------------------------------------------------------------------
         # ...existing logging / metrics...
+        
+        # Clear cache after checkpoint saving
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            gc.collect()  # Force garbage collection
 
     # ------------------------ summary -----------------------------------------
-    print(f"Best checkpoint saved to: {best_ckpt_path}")
+    # print(f"Best checkpoint saved to: {best_ckpt_path}")
     # --------------------------------------------------------------------------
 
     if wandb_run:                           # close run
