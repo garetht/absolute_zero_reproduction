@@ -83,7 +83,10 @@ class MegaBuffer:
             )
             
             # Fill data for each problem in minibatch
-            for mb_idx, (problem, is_from_buffer) in enumerate(zip(minibatch_problems, minibatch_buffer_mask)):
+            seed_entries: list[tuple[Problem, int]] = []      # (problem, mb_idx)
+            for mb_idx, (problem, is_from_buffer) in enumerate(
+                zip(minibatch_problems, minibatch_buffer_mask)
+            ):
                 if is_from_buffer:
                     # Use pre-calculated data from rollout
                     buffer_idx = indices[mb_idx]  # Original index in buffer
@@ -92,13 +95,19 @@ class MegaBuffer:
                     minibatch_attention_masks[:, :, mb_idx] = self.attention_masks[:, :, buffer_idx]
                     minibatch_rewards[:, :, mb_idx] = self.rewards[:, :, buffer_idx]
                 else:
-                    # Calculate on-the-fly for seed problem
-                    if model is not None and tokenizer is not None:
-                        self._calculate_seed_logprobs(problem, mb_idx, minibatch_sample_ids, 
-                                                    minibatch_logprobs, minibatch_attention_masks, 
-                                                    model, tokenizer)
-                        # For seed problems, set rewards to zero (they don't have computed rewards)
-                        minibatch_rewards[:, :, mb_idx] = 0.0
+                    seed_entries.append((problem, mb_idx))
+
+            # ---- NEW: single batched forward pass for all seed problems ----
+            if seed_entries and model is not None and tokenizer is not None:
+                self._calculate_batch_seed_logprobs(
+                    seed_entries,
+                    minibatch_sample_ids,
+                    minibatch_logprobs,
+                    minibatch_attention_masks,
+                    model,
+                    tokenizer,
+                )
+                # rewards for seed problems stay zero
             
             out.append(
                 MiniBatch(
@@ -133,22 +142,64 @@ class MegaBuffer:
         
         return combined_problems, buffer_mask
     
-    def _calculate_seed_logprobs(self, problem, mb_idx, minibatch_sample_ids, 
-                               minibatch_logprobs, minibatch_attention_masks, model, tokenizer):
-        """Calculate logprobs on-the-fly for a seed problem"""
-        from model.inference import generate_response
-        
-        # Generate logprobs for each role (only need solver role for this problem's task type)
-        for role in Role:
-            prompt = problem.get_prompt(role)
-            response, logprobs, sample_ids, prompt_ids, attention_mask = generate_response(
-                self.args, model, tokenizer, prompt
-            )
+    def _calculate_seed_logprobs(
+        self,
+        problem,
+        mb_idx,
+        minibatch_sample_ids,
+        minibatch_logprobs,
+        minibatch_attention_masks,
+        model,
+        tokenizer,
+    ):
+        """Calculate logprobs on-the-fly for a seed problem (now batched over roles)"""
+        from model.inference import generate_response_bulk  # bulk version
 
-            # Store in minibatch tensors (only for this problem's task type)
-            minibatch_sample_ids[role.value, problem.task_type.value, mb_idx] = sample_ids
-            minibatch_logprobs[role.value, problem.task_type.value, mb_idx] = logprobs
-            minibatch_attention_masks[role.value, problem.task_type.value, mb_idx] = attention_mask
+        # Collect one prompt per role, then run the model once
+        prompts = [problem.get_prompt(role) for role in Role]
+        _, logprobs_bulk, sample_ids_bulk, _, attention_masks_bulk = generate_response_bulk(
+            self.args, model, tokenizer, prompts
+        )
+
+        # Distribute the outputs to their respective role / task indices
+        task_idx = problem.task_type.value
+        for role_idx, role in enumerate(Role):
+            minibatch_sample_ids[role_idx, task_idx, mb_idx] = sample_ids_bulk[role_idx]
+            minibatch_logprobs[role_idx, task_idx, mb_idx] = logprobs_bulk[role_idx]
+            minibatch_attention_masks[role_idx, task_idx, mb_idx] = attention_masks_bulk[role_idx]
+
+    # ---------------------------------------------------------------------
+    # NEW helper: batched seed generation (across problems *and* roles)
+    # ---------------------------------------------------------------------
+    def _calculate_batch_seed_logprobs(
+        self,
+        seed_entries: list[tuple[Problem, int]],  # (problem, mb_idx)
+        minibatch_sample_ids,
+        minibatch_logprobs,
+        minibatch_attention_masks,
+        model,
+        tokenizer,
+    ):
+        """Run one bulk generation over every (problem, role) pair in seed_entries."""
+        from model.inference import generate_response_bulk
+
+        prompts, mapping = [], []   # mapping -> (role_idx, task_idx, mb_idx)
+        for problem, mb_idx in seed_entries:
+            task_idx = problem.task_type.value
+            for role_idx, role in enumerate(Role):
+                prompts.append(problem.get_prompt(role))
+                mapping.append((role_idx, task_idx, mb_idx))
+
+        # Bulk generation
+        _, logprobs_bulk, sample_ids_bulk, _, attention_masks_bulk = generate_response_bulk(
+            self.args, model, tokenizer, prompts
+        )
+
+        # Scatter back into minibatch tensors
+        for i, (role_idx, task_idx, mb_idx) in enumerate(mapping):
+            minibatch_sample_ids[role_idx, task_idx, mb_idx] = sample_ids_bulk[i]
+            minibatch_logprobs[role_idx, task_idx, mb_idx] = logprobs_bulk[i]
+            minibatch_attention_masks[role_idx, task_idx, mb_idx] = attention_masks_bulk[i]
 
     @property
     def combined_buffer(self):

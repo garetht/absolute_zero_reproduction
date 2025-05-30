@@ -1,3 +1,4 @@
+import datetime
 import torch
 import os, tempfile
 import wandb                               # NEW
@@ -24,7 +25,7 @@ def save_model_checkpoint(model, path: str):
 def main():
     wandb_project_name = "AZR"
     use_mock = False
-    run_name = "AZR-Run-testcheckpoint"
+    run_name = f"AZR-Run-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
 
     if use_mock:
         model = MockAutoModelForCausalLM()
