@@ -21,7 +21,7 @@ from model.compute.reward import compute_r_total
 from model.inference import generate_response, generate_response_bulk, \
     generate_response_bulk_with_grads
 from model.eval.baselines import run_baseline_evaluation_prime_samples
-from utils.debug_grads import debug_tensor_grads
+
 from utils.string_formatting import validate_proposer_formatting_and_correctness, \
     create_problem_from_answer, validate_single_response, CHECK_MAP
 
@@ -129,11 +129,7 @@ class AZRTrainer:
                                    self.args.clip_ratio) * masked_importance_ratio  # shape: (role, task, minibatch_size, seq_len,
 
 
-        debug_tensor_grads(non_clipped, "non_clipped")
-        debug_tensor_grads(clipped, "clipped")
-        debug_tensor_grads(masked_importance_ratio, "masked_importance_ratio")
-        debug_tensor_grads(importance_ratio, "importance_ratio")
-        debug_tensor_grads(attention_masks, "attention_masks")
+
 
         # Use attention masks for proper averaging - only count valid positions
         objective_per_position = torch.minimum(non_clipped, clipped)

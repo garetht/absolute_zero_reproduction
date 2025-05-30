@@ -6,7 +6,7 @@ from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
 from constants import DEVICE
 from david.sampler import generate_with_logprobs, generate_with_logprobs_2
 from model.args import AZRArgs
-from utils.debug_grads import debug_tensor_grads
+
 
 
 def generate_without_grads(model: torch.nn.Module, inputs: BatchEncoding, tokenizer: PreTrainedTokenizerFast, max_new_tokens: int, device: torch.device) -> \
