@@ -55,12 +55,9 @@ Float[torch.Tensor, "batch max_new_tokens d_vocab"], Int[torch.Tensor, "batch ma
     # might need to do this in chunks
     logits = model(input_ids).logits
 
-    print(f"{logits.shape=}")
-    print(f"{prompt_len=}")
 
     logits = logits[:, prompt_len - 1:-1]
 
-    print(f"{logits.shape=}")
 
     logprobs = torch.log_softmax(logits, dim=-1)
     completion_ids = input_ids[:, prompt_len:]
@@ -83,9 +80,6 @@ Float[torch.Tensor, "batch max_new_tokens d_vocab"], Int[torch.Tensor, "batch ma
     target_length = args.max_response_length
     current_length = logprobs_per_token.size(1)
 
-    print(f"before : {logprobs.shape=}")
-    print(f"before : {logprobs_per_token.shape=}")
-    print(f"before : {attention_mask.shape=}")
 
     if current_length < target_length:
         # Pad with zeros
@@ -100,9 +94,6 @@ Float[torch.Tensor, "batch max_new_tokens d_vocab"], Int[torch.Tensor, "batch ma
         attention_mask = attention_mask[:, :target_length]
         completion_ids = completion_ids[:, :target_length]
 
-    print(f"{logprobs.shape=}")
-    print(f"{logprobs_per_token.shape=}")
-    print(f"{attention_mask.shape=}")
 
     return completion_ids, logprobs, logprobs_per_token, attention_mask
 
@@ -199,7 +190,6 @@ def generate_with_logprobs(model: AutoModelForCausalLM,
         raise ValueError(f"Generated sequence is longer than the target length: {current_length} > {target_length}")
 
     assert logprobs_per_token.shape == attention_mask.shape == completion_ids.shape, f"sampler.py: {logprobs_per_token.shape=} {attention_mask.shape=} {completion_ids.shape=}"
-    assert logprobs.shape[-1] == args.max_response_length, f"sampler.py: {logprobs.shape=} {args.max_response_length=}"
 
     if debug:
         print(f"{logprobs_per_token.shape=}")

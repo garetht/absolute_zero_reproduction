@@ -92,13 +92,37 @@ class AZRTrainer:
 
         old_logprobs = minibatch.logprobs
 
-        importance_ratio = (new_logprobs - old_logprobs).exp()  # shape: (role, task, minibatch_size, seq_len)
+        # Check for NaN/inf in inputs
+        if torch.isnan(new_logprobs).any() or torch.isinf(new_logprobs).any():
+            print(f"WARNING: NaN/inf detected in new_logprobs")
+            print(f"new_logprobs stats: min={new_logprobs.min()}, max={new_logprobs.max()}, mean={new_logprobs.mean()}")
+        
+        if torch.isnan(old_logprobs).any() or torch.isinf(old_logprobs).any():
+            print(f"WARNING: NaN/inf detected in old_logprobs")
+            print(f"old_logprobs stats: min={old_logprobs.min()}, max={old_logprobs.max()}, mean={old_logprobs.mean()}")
+
+        # Clip the difference to prevent explosion
+        logprob_diff = new_logprobs - old_logprobs
+        logprob_diff = torch.clamp(logprob_diff, min=-10.0, max=10.0)  # Prevent extreme values
+        
+        importance_ratio = logprob_diff.exp()  # shape: (role, task, minibatch_size, seq_len)
+        
+        # Check importance ratio
+        if torch.isnan(importance_ratio).any() or torch.isinf(importance_ratio).any():
+            print(f"WARNING: NaN/inf detected in importance_ratio")
+            print(f"importance_ratio stats: min={importance_ratio.min()}, max={importance_ratio.max()}, mean={importance_ratio.mean()}")
 
         # Apply attention masks to zero out padded positions
         attention_masks = minibatch.attention_masks.float()  # shape: (role, task, minibatch_size, seq_len)
         masked_importance_ratio = importance_ratio * attention_masks
 
         unsqueezed_advantages = advantages.unsqueeze(-1)
+        
+        # Check advantages
+        if torch.isnan(advantages).any() or torch.isinf(advantages).any():
+            print(f"WARNING: NaN/inf detected in advantages")
+            print(f"advantages stats: min={advantages.min()}, max={advantages.max()}, mean={advantages.mean()}")
+        
         non_clipped = unsqueezed_advantages * masked_importance_ratio  # shape: (role, task, minibatch_size, seq_len, )
         # compute the clipped objective
         clipped = unsqueezed_advantages.clamp(-self.args.clip_ratio,
@@ -202,8 +226,7 @@ class AZRTrainer:
         for task_type in TaskType:
             problems: list[Problem] = self.mega_buffer.sample_from_buffer(num_to_sample=self.args.batch_size)
             task_prompts = [problem.get_prompt(Role.SOLVER) for problem in problems]
-            print(f"{task_prompts=}")
-            print(f"{len(problems)=}")
+
             responses, logprobs, sample_ids, prompt_ids, attention_masks = generate_response_bulk(self.args,
                                                                                                   self.training_model,
                                                                                                   self.tokenizer,
@@ -261,22 +284,84 @@ class AZRTrainer:
 
             for role in Role:
                 prompts = [problem.get_prompt(role) for problem in mini_batch.samples]
+
+                # correct signature: (model, tokenizer, prompts, args)
                 completion_ids, attention_masks, logprobs = generate_with_logprobs(
-                    self.args, self.training_model, self.tokenizer, prompts
+                    self.training_model,
+                    self.tokenizer,
+                    prompts,
+                    self.args,
                 )
 
-                print(f"{logprobs.shape=}")
+                # Ensure (batch, seq_len) shape even when batch == 1
+                if logprobs.dim() == 1:         # (seq_len,) -> (1, seq_len)
+                    logprobs = logprobs.unsqueeze(0)
+                if attention_masks.dim() == 1:  # (seq_len,) -> (1, seq_len)
+                    attention_masks = attention_masks.unsqueeze(0)
+
+
+                
+                # Check for NaN/inf in logprobs
+                if torch.isnan(logprobs).any() or torch.isinf(logprobs).any():
+                    print(f"WARNING: NaN/inf detected in logprobs for {role}")
+                    print(f"logprobs stats: min={logprobs.min()}, max={logprobs.max()}, mean={logprobs.mean()}")
 
                 # Fill tensor for this role across all task types (but only the problem's specific task type matters)
                 for mb_idx, problem in enumerate(mini_batch.samples):
-                    new_logprobs[role.value, problem.task_type.value, mb_idx] = logprobs
+                    new_logprobs[role.value, problem.task_type.value, mb_idx] = logprobs[mb_idx]
                     new_attention_masks[role.value, problem.task_type.value, mb_idx] = attention_masks[mb_idx]
 
             advantages = compute_advantages(self.args, mini_batch.rewards)  # shape role task minibatch_size
             objective = self.compute_azr_objective(advantages, new_logprobs, mini_batch)
+            
+            # Check objective before backward
+            if torch.isnan(objective).any() or torch.isinf(objective).any():
+                print(f"ERROR: NaN/inf detected in objective: {objective}")
+                print("Skipping this minibatch update")
+                continue
+            
+
+
+            # Log gradient norms before clipping
+            total_norm_before = 0.0
+            param_norms_before = []
+            for p in self.training_model.parameters():
+                if p.grad is not None:
+                    param_norm = p.grad.data.norm(2).item()
+                    param_norms_before.append(param_norm)
+                    total_norm_before += param_norm ** 2
+            total_norm_before = total_norm_before ** 0.5
+            
+
+            if total_norm_before > 100:
+                print(f"WARNING: Large gradient norm detected: {total_norm_before}")
+                print(f"Max param gradient norm: {max(param_norms_before)}")
 
             objective.backward()
+            
+            # Check for NaN/inf in gradients
+            has_nan_grad = False
+            for name, param in self.training_model.named_parameters():
+                if param.grad is not None:
+                    if torch.isnan(param.grad).any() or torch.isinf(param.grad).any():
+                        print(f"ERROR: NaN/inf gradient in parameter: {name}")
+                        has_nan_grad = True
+            
+            if has_nan_grad:
+                print("ERROR: NaN/inf gradients detected, skipping update")
+                self.optimizer.zero_grad()
+                continue
+            
             torch.nn.utils.clip_grad_norm_(self.training_model.parameters(), self.args.max_grad_norm)
+            
+            # Log gradient norms after clipping
+            total_norm_after = 0.0
+            for p in self.training_model.parameters():
+                if p.grad is not None:
+                    param_norm = p.grad.data.norm(2).item()
+                    total_norm_after += param_norm ** 2
+            total_norm_after = total_norm_after ** 0.5
+            
             self.optimizer.step()
             self.optimizer.zero_grad()
 
@@ -290,6 +375,13 @@ class AZRTrainer:
             if self.args.use_wandb:
                 # Log accuracy
                 wandb.log({"minibatch_accuracy": eval_results['accuracy']}, step=self.step)
+                
+                # Log gradient norms
+                wandb.log({
+                    "gradient_norm_before_clip": total_norm_before,
+                    "gradient_norm_after_clip": total_norm_after,
+                    "objective": objective.item()
+                }, step=self.step)
 
                 # Log rewards by role and task type
                 reward_logs = {}

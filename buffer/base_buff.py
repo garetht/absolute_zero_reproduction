@@ -145,9 +145,6 @@ class MegaBuffer:
                 self.args, model, tokenizer, prompt
             )
 
-            print(f"{logprobs.shape=}")
-            print(f"{minibatch_logprobs.shape=}")
-
             # Store in minibatch tensors (only for this problem's task type)
             minibatch_sample_ids[role.value, problem.task_type.value, mb_idx] = sample_ids
             minibatch_logprobs[role.value, problem.task_type.value, mb_idx] = logprobs
@@ -158,11 +155,9 @@ class MegaBuffer:
         return self.seed_buffer + self.buffer
 
     def sample_from_buffer(self, num_to_sample: int) -> list[Problem]:
-        print(f"{len(self.combined_buffer)=}")
         indices = numpy.random.choice(
             len(self.combined_buffer), num_to_sample, replace=True
         )
-        print(f"{indices=}")
         return [self.combined_buffer[i] for i in indices]
 
     def initialize_seed_buffer(

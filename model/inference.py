@@ -11,7 +11,7 @@ from utils.debug_grads import debug_tensor_grads
 
 def generate_without_grads(model: torch.nn.Module, inputs: BatchEncoding, tokenizer: PreTrainedTokenizerFast, max_new_tokens: int, device: torch.device) -> \
         tuple[Int[torch.Tensor, "batch_size max_response_len"], Float[torch.Tensor, "batch_size max_response_len"]]:
-        print(f"{inputs.input_ids.shape=}")
+
 
         outputs = model.generate(
             inputs.input_ids.to(DEVICE),
@@ -24,13 +24,21 @@ def generate_without_grads(model: torch.nn.Module, inputs: BatchEncoding, tokeni
             use_cache=True,
         )
         generated_ids = outputs.sequences[:, inputs.input_ids.shape[1] :]
-        print(f"{generated_ids.shape=}")
 
-        scores = torch.cat(outputs.scores, dim=0)
-        logprobs = torch.log_softmax(scores, dim=-1)
 
-        # TODO: need to slice this?
-        return generated_ids, logprobs.gather(dim=-1, index=generated_ids.to(torch.int64)).squeeze(-1)
+        # ------------------------------------------------------------------
+        # OLD: scores = torch.cat(outputs.scores, dim=0)     # wrong shape
+        # NEW: stack on a separate time axis (batch, seq_len, vocab)
+        scores = torch.stack(outputs.scores, dim=1)           # (B, T, V)
+        logprobs = torch.log_softmax(scores, dim=-1)          # same shape
+        # Gather the log-prob of each generated token
+        logprobs_per_token = logprobs.gather(
+            dim=-1,
+            index=generated_ids.unsqueeze(-1)
+        ).squeeze(-1)                                         # (B, T)
+        # ------------------------------------------------------------------
+
+        return generated_ids, logprobs_per_token
 
 
 # returns the str response and the logprobs for the response
@@ -66,11 +74,9 @@ def generate_response_bulk(
     Int[torch.Tensor, "batch_size prompt_len"],
     Int[torch.Tensor, "batch_size max_response_len"],
 ]:
-    print("=" * 80)
-    print("Preparing to call model with prompts: ")
-    for prompt in prompts:
-        print(prompt)
-        print('-' * 20)
+
+
+
 
     # Tokenize inputs with padding
     inputs = tokenizer(
@@ -124,10 +130,7 @@ def generate_response_bulk(
 
     # Process logits and pad to max_response_length
     # logits are these shape: (actual_length, batch_size, vocab_size) before transpose
-    print("Receiving responses from model")
-    for response in responses:
-        print(response)
-        print('-' * 40)
+
     # Pad logprobs to max_response_length if needed
     if actual_length < args.max_response_length:
         padding_length = args.max_response_length - actual_length
