@@ -12,5 +12,5 @@ DEVICE = (
     if torch.mps.is_available()
     else "cpu"
 )
-
+CHECKPOINT_DIR = "/workspace/checkpoints"
 MAXIMUM_PRIME = 617

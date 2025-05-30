@@ -1,20 +1,30 @@
 import torch
-import wandb
+import os, tempfile
+import wandb                               # NEW
 from transformers import AutoTokenizer, AutoModelForCausalLM
-import os, tempfile                     # NEW
+from safetensors.torch import save_file   # NEW
 
 from buffer.base_buff import MegaBuffer
-from constants import MODEL_NAME, DEVICE
+from constants import CHECKPOINT_DIR, MODEL_NAME, DEVICE
 from custom_types import Role, TaskType
 from model.args import AZRArgs
 from model.trainer import AZRTrainer
 from utils.mocks.mock_transformer import MockAutoModelForCausalLM
 
 
+# ---------------------------------------------------------------------------
+# Helper to robustly save checkpoints (avoids zip-writer bug & GPU tensors)
+def save_model_checkpoint(model, path: str):
+    """Save model.state_dict() on CPU in the .safetensors format."""
+    state_dict_cpu = {k: v.detach().to("cpu") for k, v in model.state_dict().items()}
+    save_file(state_dict_cpu, path)      # safetensors write
+# ---------------------------------------------------------------------------
+
+
 def main():
     wandb_project_name = "AZR"
     use_mock = False
-    run_name = "AZR-Run"
+    run_name = "AZR-Run-testcheckpoint"
 
     if use_mock:
         model = MockAutoModelForCausalLM()
@@ -85,8 +95,8 @@ def main():
         optimizer=optimizer,
         run_name=args.run_name,
     )
-
-    # --- WandB ----------------------------------------------------------------
+ 
+    # -------- WandB run ------------------------------------------------------
     wandb_run = None
     if args.use_wandb:
         wandb_run = wandb.init(
@@ -95,54 +105,47 @@ def main():
             name=args.run_name,
             config=args,
         )
+    # -------------------------------------------------------------------------
+
+    # --- local checkpoint directory -------------------------------------------
+    ckpt_dir = os.path.join(CHECKPOINT_DIR, run_name)
+    os.makedirs(ckpt_dir, exist_ok=True)
     # --------------------------------------------------------------------------
 
+    tmp_dir = tempfile.gettempdir()        # still used for temp saving
+    current_ckpt_path = os.path.join(tmp_dir,  f"{run_name}_current.safetensors")
+    best_ckpt_path    = os.path.join(ckpt_dir, f"{run_name}_best.safetensors")
+
     # ---------- checkpoint bookkeeping ----------------------------------------
-    tmp_dir = tempfile.gettempdir()
-    current_ckpt_path = os.path.join(tmp_dir, f"{run_name}_current.pt")
-    best_ckpt_path    = os.path.join(tmp_dir, f"{run_name}_best.pt")
-    best_accuracy = float("-inf")              # RENAMED
+    best_accuracy = float("-inf")
     # --------------------------------------------------------------------------
 
     for phase in range(args.total_phases):
-        # learning_phase now returns accuracy
-        phase_accuracy = trainer.learning_phase()
-        if phase_accuracy is None:             # fallback
-            phase_accuracy = getattr(trainer, "latest_accuracy", 0.0)
+        phase_accuracy = trainer.learning_phase() or getattr(trainer,
+                                                             "latest_accuracy",
+                                                             0.0)
+        if wandb_run:                       # log metrics
+            wandb_run.log({"phase": phase, "accuracy": phase_accuracy})
 
-        # -------- save & log current checkpoint -------------------------------
-        torch.save(model.state_dict(), current_ckpt_path)
-        if wandb_run:
-            current_artifact = wandb.Artifact(f"{run_name}-current", type="model")
-            current_artifact.add_file(current_ckpt_path)
-            wandb_run.log_artifact(current_artifact, aliases=["current"])
-        # ----------------------------------------------------------------------
+        # -------- save current checkpoint (temp) ------------------------------
+        save_model_checkpoint(model, current_ckpt_path)
+         # ----------------------------------------------------------------------
 
         # -------- update best checkpoint --------------------------------------
         if phase_accuracy > best_accuracy:
             best_accuracy = phase_accuracy
-            torch.save(model.state_dict(), best_ckpt_path)
-            if wandb_run:
-                best_artifact = wandb.Artifact(f"{run_name}-best", type="model")
-                best_artifact.add_file(best_ckpt_path)
-                wandb_run.log_artifact(best_artifact, aliases=["best"])
-        # ----------------------------------------------------------------------
+            save_model_checkpoint(model, best_ckpt_path)
+         # ----------------------------------------------------------------------
         # ...existing logging / metrics...
 
-    # ------------------------ final model -------------------------------------
-    final_ckpt_path = os.path.join(tmp_dir, f"{run_name}_final.pt")
-    torch.save(model.state_dict(), final_ckpt_path)
-    if wandb_run:
-        final_artifact = wandb.Artifact(f"{run_name}-final", type="model")
-        final_artifact.add_file(final_ckpt_path)
-        wandb_run.log_artifact(final_artifact, aliases=["final"])
+    # ------------------------ summary -----------------------------------------
+    print(f"Best checkpoint saved to: {best_ckpt_path}")
     # --------------------------------------------------------------------------
 
-    # close the single WandB run after all phases are done
-    if wandb_run:                              # moved outside the loop
-        wandb.finish()
+    if wandb_run:                           # close run
+        wandb_run.finish()
 
-    print("Training completed and model saved to WandB artifacts.")
+    print("Training completed and best model checkpoint saved locally.")
 
 if __name__ == "__main__":
     main()
