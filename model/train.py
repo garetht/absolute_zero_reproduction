@@ -1,4 +1,4 @@
-import datetime
+from datetime import datetime
 import torch
 import os, tempfile
 import wandb                               # NEW
