@@ -1,7 +1,7 @@
 import torch
 import wandb
 from transformers import AutoTokenizer, AutoModelForCausalLM
-import os
+import os, tempfile                     # NEW
 
 from buffer.base_buff import MegaBuffer
 from constants import MODEL_NAME, DEVICE
@@ -86,64 +86,63 @@ def main():
         run_name=args.run_name,
     )
 
+    # --- WandB ----------------------------------------------------------------
+    wandb_run = None
     if args.use_wandb:
-        wandb.init(
+        wandb_run = wandb.init(
             project=args.wandb_project_name,
             entity=args.wandb_entity,
             name=args.run_name,
             config=args,
         )
+    # --------------------------------------------------------------------------
 
-    # --- checkpoint bookkeeping ---
-    ckpt_dir = os.path.join("checkpoints", args.run_name)
-    os.makedirs(ckpt_dir, exist_ok=True)
-    best_reward = float("-inf")
-    best_ckpt_path = None
-    prev_ckpt_path = None
-    # ------------------------------
+    # ---------- checkpoint bookkeeping ----------------------------------------
+    tmp_dir = tempfile.gettempdir()
+    current_ckpt_path = os.path.join(tmp_dir, f"{run_name}_current.pt")
+    best_ckpt_path    = os.path.join(tmp_dir, f"{run_name}_best.pt")
+    best_accuracy = float("-inf")              # RENAMED
+    # --------------------------------------------------------------------------
 
     for phase in range(args.total_phases):
-        phase_reward = trainer.learning_phase()  # assumes the method returns the reward
-        if phase_reward is None:                 # fallback for trainers that don't return it
-            phase_reward = getattr(trainer, "latest_reward", 0.0)
+        # learning_phase now returns accuracy
+        phase_accuracy = trainer.learning_phase()
+        if phase_accuracy is None:             # fallback
+            phase_accuracy = getattr(trainer, "latest_accuracy", 0.0)
 
-        # ---- save current checkpoint ----
-        curr_ckpt_path = os.path.join(ckpt_dir, f"{args.run_name}_phase_{phase}.pt")
-        torch.save(model.state_dict(), curr_ckpt_path)
+        # -------- save & log current checkpoint -------------------------------
+        torch.save(model.state_dict(), current_ckpt_path)
+        if wandb_run:
+            current_artifact = wandb.Artifact(f"{run_name}-current", type="model")
+            current_artifact.add_file(current_ckpt_path)
+            wandb_run.log_artifact(current_artifact, aliases=["current"])
+        # ----------------------------------------------------------------------
 
-        # keep only two checkpoints: best and current
-        if prev_ckpt_path and prev_ckpt_path != best_ckpt_path:
-            # remove the superseded “current” checkpoint
-            try:
-                os.remove(prev_ckpt_path)
-            except OSError:
-                pass
-        prev_ckpt_path = curr_ckpt_path
-        # ---------------------------------
+        # -------- update best checkpoint --------------------------------------
+        if phase_accuracy > best_accuracy:
+            best_accuracy = phase_accuracy
+            torch.save(model.state_dict(), best_ckpt_path)
+            if wandb_run:
+                best_artifact = wandb.Artifact(f"{run_name}-best", type="model")
+                best_artifact.add_file(best_ckpt_path)
+                wandb_run.log_artifact(best_artifact, aliases=["best"])
+        # ----------------------------------------------------------------------
+        # ...existing logging / metrics...
 
-        # ---- update best checkpoint ----
-        if phase_reward > best_reward:
-            # remove the previous best (unless it is the same as curr_ckpt_path)
-            if best_ckpt_path and best_ckpt_path != curr_ckpt_path:
-                try:
-                    os.remove(best_ckpt_path)
-                except OSError:
-                    pass
-            best_reward = phase_reward
-            best_ckpt_path = curr_ckpt_path
-        # ---------------------------------
+    # ------------------------ final model -------------------------------------
+    final_ckpt_path = os.path.join(tmp_dir, f"{run_name}_final.pt")
+    torch.save(model.state_dict(), final_ckpt_path)
+    if wandb_run:
+        final_artifact = wandb.Artifact(f"{run_name}-final", type="model")
+        final_artifact.add_file(final_ckpt_path)
+        wandb_run.log_artifact(final_artifact, aliases=["final"])
+    # --------------------------------------------------------------------------
 
-        # Add any additional logging here
-        # ...existing code...
-
-    if args.use_wandb:
+    # close the single WandB run after all phases are done
+    if wandb_run:                              # moved outside the loop
         wandb.finish()
 
-    # Save the final model
-    final_model_path = os.path.join(ckpt_dir, f"{args.run_name}_final.pt")
-    torch.save(model.state_dict(), final_model_path)
-
-    print("Training completed and model saved.")
+    print("Training completed and model saved to WandB artifacts.")
 
 if __name__ == "__main__":
     main()
