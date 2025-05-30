@@ -195,3 +195,5 @@ Thumbs.db
 config.ini
 secrets.json
 .secrets/
+
+wandb

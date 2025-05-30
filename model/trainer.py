@@ -10,6 +10,7 @@ import wandb
 from jaxtyping import Float, Int
 from transformers import AutoModelForCausalLM
 from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
+from tqdm.auto import tqdm   # NEW
 
 from buffer.base_buff import BaseBuffer, MegaBuffer
 from constants import DEVICE
@@ -175,7 +176,7 @@ class AZRTrainer:
             self.args, self.training_model, self.tokenizer, deduction_prompts)
 
         # Process responses and validation
-        for batch_idx in range(self.args.batch_size):
+        for batch_idx in tqdm(range(self.args.batch_size), desc="Rollout | Proposer batches"):
             # INDUCTION - process individual response from batch
             induction_response = induction_responses[batch_idx]
             induction_answers = validate_single_response(induction_response, CHECK_MAP[TaskType.INDUCTION])
@@ -219,7 +220,7 @@ class AZRTrainer:
             self.mega_buffer.attention_masks[Role.PROPOSER.value, TaskType.INDUCTION.value, batch_idx, ...] = induction_attention_masks_bulk[batch_idx]
 
         # SOLVE PROBLEMS
-        for task_type in TaskType:
+        for task_type in tqdm(TaskType, desc="Rollout | Solver task types"):
             problems: list[Problem] = self.mega_buffer.sample_from_buffer(num_to_sample=self.args.batch_size)
             task_prompts = [problem.get_prompt(Role.SOLVER) for problem in problems]
 
@@ -247,6 +248,8 @@ class AZRTrainer:
         # Store rewards in buffer for sampling
         self.mega_buffer.rewards = all_rewards
 
+        # Notify completion of rollout phase
+        tqdm.write("✅ Finished rollout phase")
 
     def learning_phase(self) -> None:
         """
@@ -264,7 +267,10 @@ class AZRTrainer:
         self.rollout_phase()
 
         # now do minibatch policy updates
-        for mini_batch in self.mega_buffer.get_minibatches(self.training_model, self.tokenizer):
+        for mb_idx, mini_batch in tqdm(
+                enumerate(self.mega_buffer.get_minibatches(self.training_model, self.tokenizer)), desc="Learning | Minibatches",
+                start=1
+                     ):
             self.step += 1
             # first do a forward pass on current policy to get the logprobs used in importance ratio
             # generate for both roles since loss uses both proposer and solver logprobs
@@ -387,3 +393,6 @@ class AZRTrainer:
                         reward_logs[f"reward/{role}_{task}"] = mean_reward
 
                 wandb.log(reward_logs, step=self.step)
+
+            # Inform about minibatch completion
+            tqdm.write(f"✅ Completed minibatch {mb_idx} (global step {self.step})")
