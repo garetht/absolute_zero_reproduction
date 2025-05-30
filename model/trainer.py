@@ -371,9 +371,9 @@ class AZRTrainer:
             # Evaluate after gradient update
             eval_results = run_baseline_evaluation_prime_samples(
                 self.args, self.training_model, self.tokenizer, generate_problems(
-                    n = self.args.minibatch_size,
-                    primes=PRIMES[5:12],
-                    seed=42
+                    n = self.args.batch_size,
+                    primes=PRIMES[7:14],
+                    seed=self.args.seed
                 )
             )
             print(f"Minibatch accuracy: {eval_results['accuracy']:.2%}")
