@@ -13,12 +13,12 @@ class AZRArgs:
     run_name: str = "AZR-Run"
 
     # Wandb / logging
-    use_wandb: bool = False
+    use_wandb: bool = True
     wandb_project_name: str = "AZR"
     wandb_entity: str | None = None
 
     # Duration of different phases
-    total_phases: int = 100
+    total_phases: int = 10
 
     # Optimization hyperparameters
     max_grad_norm: float = 1.0
@@ -39,7 +39,7 @@ class AZRArgs:
     max_programs: int = 16384
 
     # Training Settings
-    lr: float = 1e-5 # dave made me change this
+    lr: float = 1e-6 
     grad_clip: float = 1.0
     total_steps: int = 500
 
@@ -52,8 +52,8 @@ class AZRArgs:
     k_references: int = 6
     n_samples_to_estimate_task_accuracy: int = 8
     # our params
-    n_minibatches: int = 2
-    minibatch_size: int = 1
+    n_minibatches: int = 2  # Reduced from 4
+    minibatch_size: int = 4  # Reduced from 8
     batch_size = minibatch_size * n_minibatches
     clip_ratio: float = 0.2
     eps: float = 1e-5

@@ -57,7 +57,28 @@ class MegaBuffer:
         # Combine buffer and seed_buffer if needed to reach batch_size
         combined_problems, buffer_mask = self._get_combined_problems_with_mask()
         
+        # Pre-generate seed data if needed
+        seed_data = {}  # Maps batch_idx to (sample_ids, logprobs, attention_masks)
+        if model is not None and tokenizer is not None:
+            seed_entries = []
+            for batch_idx, (problem, is_from_buffer) in enumerate(zip(combined_problems, buffer_mask)):
+                if not is_from_buffer:
+                    seed_entries.append((problem, batch_idx))
+            
+            if seed_entries:
+                # Generate all seed data at once
+                seed_sample_ids, seed_logprobs, seed_attention_masks = self._generate_all_seed_data(
+                    seed_entries, model, tokenizer
+                )
+                for i, (_, batch_idx) in enumerate(seed_entries):
+                    seed_data[batch_idx] = (
+                        seed_sample_ids[:, :, i],
+                        seed_logprobs[:, :, i],
+                        seed_attention_masks[:, :, i]
+                    )
+        
         out = []
+
         for indices in torch.randperm(self.args.batch_size).reshape(
             self.args.n_minibatches, -1
         ):
@@ -83,22 +104,22 @@ class MegaBuffer:
             )
             
             # Fill data for each problem in minibatch
-            for mb_idx, (problem, is_from_buffer) in enumerate(zip(minibatch_problems, minibatch_buffer_mask)):
+            for mb_idx, (batch_idx, is_from_buffer) in enumerate(
+                zip(indices, minibatch_buffer_mask)
+            ):
                 if is_from_buffer:
                     # Use pre-calculated data from rollout
-                    buffer_idx = indices[mb_idx]  # Original index in buffer
-                    minibatch_sample_ids[:, :, mb_idx] = self.sample_ids[:, :, buffer_idx]
-                    minibatch_logprobs[:, :, mb_idx] = self.logprobs[:, :, buffer_idx]
-                    minibatch_attention_masks[:, :, mb_idx] = self.attention_masks[:, :, buffer_idx]
-                    minibatch_rewards[:, :, mb_idx] = self.rewards[:, :, buffer_idx]
+                    minibatch_sample_ids[:, :, mb_idx] = self.sample_ids[:, :, batch_idx]
+                    minibatch_logprobs[:, :, mb_idx] = self.logprobs[:, :, batch_idx]
+                    minibatch_attention_masks[:, :, mb_idx] = self.attention_masks[:, :, batch_idx]
+                    minibatch_rewards[:, :, mb_idx] = self.rewards[:, :, batch_idx]
                 else:
-                    # Calculate on-the-fly for seed problem
-                    if model is not None and tokenizer is not None:
-                        self._calculate_seed_logprobs(problem, mb_idx, minibatch_sample_ids, 
-                                                    minibatch_logprobs, minibatch_attention_masks, 
-                                                    model, tokenizer)
-                        # For seed problems, set rewards to zero (they don't have computed rewards)
-                        minibatch_rewards[:, :, mb_idx] = 0.0
+                    # Use pre-generated seed data
+                    sample_ids, logprobs, attention_masks = seed_data[batch_idx.item()]
+                    minibatch_sample_ids[:, :, mb_idx] = sample_ids
+                    minibatch_logprobs[:, :, mb_idx] = logprobs
+                    minibatch_attention_masks[:, :, mb_idx] = attention_masks
+                    # rewards for seed problems stay zero
             
             out.append(
                 MiniBatch(
@@ -133,36 +154,84 @@ class MegaBuffer:
         
         return combined_problems, buffer_mask
     
-    def _calculate_seed_logprobs(self, problem, mb_idx, minibatch_sample_ids, 
-                               minibatch_logprobs, minibatch_attention_masks, model, tokenizer):
-        """Calculate logprobs on-the-fly for a seed problem"""
-        from model.inference import generate_response
-        
-        # Generate logprobs for each role (only need solver role for this problem's task type)
-        for role in Role:
-            prompt = problem.get_prompt(role)
-            response, logprobs, sample_ids, prompt_ids, attention_mask = generate_response(
-                self.args, model, tokenizer, prompt
+    def _calculate_seed_logprobs(
+        self,
+        problem,
+        mb_idx,
+        minibatch_sample_ids,
+        minibatch_logprobs,
+        minibatch_attention_masks,
+        model,
+        tokenizer,
+    ):
+        """Calculate logprobs on-the-fly for a seed problem (now batched over roles)"""
+        from model.inference import generate_response_bulk  # bulk version
+
+        # Collect one prompt per role, then run the model once
+        prompts = [problem.get_prompt(role) for role in Role]
+        _, logprobs_bulk, sample_ids_bulk, _, attention_masks_bulk = generate_response_bulk(
+            self.args, model, tokenizer, prompts
+        )
+
+        # Distribute the outputs to their respective role / task indices
+        task_idx = problem.task_type.value
+        for role_idx, role in enumerate(Role):
+            minibatch_sample_ids[role_idx, task_idx, mb_idx] = sample_ids_bulk[role_idx]
+            minibatch_logprobs[role_idx, task_idx, mb_idx] = logprobs_bulk[role_idx]
+            minibatch_attention_masks[role_idx, task_idx, mb_idx] = attention_masks_bulk[role_idx]
+
+    # ---------------------------------------------------------------------
+    # NEW helper: batched seed generation (one call per role-task pair)
+    # ---------------------------------------------------------------------
+    def _calculate_batch_seed_logprobs(
+        self,
+        seed_entries: list[tuple[Problem, int]],  # (problem, mb_idx)
+        minibatch_sample_ids,
+        minibatch_logprobs,
+        minibatch_attention_masks,
+        model,
+        tokenizer,
+    ):
+        """Run bulk generation once for every (role, task) combination (→ 6 calls)."""
+        from model.inference import generate_response_bulk
+        from tqdm import tqdm
+        import itertools
+
+        # Create a list of all (role, task_type) combinations
+        role_task_combinations = list(itertools.product(list(enumerate(Role)), list(enumerate(TaskType))))
+
+        # Iterate over roles and task types separately with tqdm
+        for (role_idx, role), (task_idx, task_type) in tqdm(role_task_combinations, desc="Generating seed data"):
+            # Collect prompts (and mb indices) for this (role, task) pair
+            prompts, mb_indices = [], []
+            for problem, mb_idx in seed_entries:
+                if problem.task_type == task_type:
+                    prompts.append(problem.get_prompt(role))
+                    mb_indices.append(mb_idx)
+
+            # Nothing to generate for this pair
+            if not prompts:
+                continue
+
+            # One call per (role, task) pair
+            _, logprobs_bulk, sample_ids_bulk, _, attention_masks_bulk = generate_response_bulk(
+                self.args, model, tokenizer, prompts
             )
 
-            print(f"{logprobs.shape=}")
-            print(f"{minibatch_logprobs.shape=}")
-
-            # Store in minibatch tensors (only for this problem's task type)
-            minibatch_sample_ids[role.value, problem.task_type.value, mb_idx] = sample_ids
-            minibatch_logprobs[role.value, problem.task_type.value, mb_idx] = logprobs
-            minibatch_attention_masks[role.value, problem.task_type.value, mb_idx] = attention_mask
+            # Scatter results back
+            for i, mb_idx in enumerate(mb_indices):
+                minibatch_sample_ids[role_idx, task_idx, mb_idx] = sample_ids_bulk[i]
+                minibatch_logprobs[role_idx, task_idx, mb_idx] = logprobs_bulk[i]
+                minibatch_attention_masks[role_idx, task_idx, mb_idx] = attention_masks_bulk[i]
 
     @property
     def combined_buffer(self):
         return self.seed_buffer + self.buffer
 
     def sample_from_buffer(self, num_to_sample: int) -> list[Problem]:
-        print(f"{len(self.combined_buffer)=}")
         indices = numpy.random.choice(
             len(self.combined_buffer), num_to_sample, replace=True
         )
-        print(f"{indices=}")
         return [self.combined_buffer[i] for i in indices]
 
     def initialize_seed_buffer(
@@ -175,3 +244,59 @@ class MegaBuffer:
             num_samples = self.args.batch_size
         problems = generate_problems(n=num_samples, primes=PRIMES, seed=self.args.seed)
         self.seed_buffer.extend(problems)
+
+    def _generate_all_seed_data(
+        self,
+        seed_entries: list[tuple[Problem, int]],  # (problem, batch_idx)
+        model,
+        tokenizer,
+    ):
+        """Generate all seed data at once, returns tensors shaped [role, task, n_seeds, seq_len]"""
+        from model.inference import generate_response_bulk
+        from tqdm import tqdm
+        import itertools
+
+        n_seeds = len(seed_entries)
+        
+        # Initialize output tensors
+        all_sample_ids = torch.zeros(
+            (len(Role), len(TaskType), n_seeds, self.args.max_response_length),
+            dtype=torch.int64, device=self.sample_ids.device
+        )
+        all_logprobs = torch.zeros(
+            (len(Role), len(TaskType), n_seeds, self.args.max_response_length),
+            dtype=self.logprobs.dtype, device=self.logprobs.device
+        )
+        all_attention_masks = torch.zeros(
+            (len(Role), len(TaskType), n_seeds, self.args.max_response_length),
+            dtype=torch.int, device=self.attention_masks.device
+        )
+
+        # Create a list of all (role, task_type) combinations
+        role_task_combinations = list(itertools.product(list(enumerate(Role)), list(enumerate(TaskType))))
+
+        # Iterate over roles and task types separately with tqdm
+        for (role_idx, role), (task_idx, task_type) in tqdm(role_task_combinations, desc="Generating seed data"):
+            # Collect prompts (and seed indices) for this (role, task) pair
+            prompts, seed_indices = [], []
+            for i, (problem, _) in enumerate(seed_entries):
+                if problem.task_type == task_type:
+                    prompts.append(problem.get_prompt(role))
+                    seed_indices.append(i)
+
+            # Nothing to generate for this pair
+            if not prompts:
+                continue
+
+            # One call per (role, task) pair
+            _, logprobs_bulk, sample_ids_bulk, _, attention_masks_bulk = generate_response_bulk(
+                self.args, model, tokenizer, prompts
+            )
+
+            # Scatter results back
+            for i, seed_idx in enumerate(seed_indices):
+                all_sample_ids[role_idx, task_idx, seed_idx] = sample_ids_bulk[i]
+                all_logprobs[role_idx, task_idx, seed_idx] = logprobs_bulk[i]
+                all_attention_masks[role_idx, task_idx, seed_idx] = attention_masks_bulk[i]
+
+        return all_sample_ids, all_logprobs, all_attention_masks

@@ -498,19 +498,19 @@ def create_solver_prompt(problem: Problem) -> str:
     return prompt
 
 
-from model.eval.prime_inversion import generate_problems
+# from model.eval.prime_inversion import generate_problems
 
-if __name__ == "__main__":
-    task_type = TaskType.INDUCTION
-    print("-------------------------")
-    print(f"[TASK TYPE] {task_type}")
-    print("-------------------------")
-    problems = generate_problems(1, [5, 7, 11], seed=0)
-    for problem in problems:
-        problem.task_type = task_type
-        solver_prompt = create_solver_prompt(problem)
-        proposer_prompt = create_proposer_prompt(problem, num_io_pairs=5)
-        print(f"[S] {solver_prompt}")
-        print("-------------------------")
-        print(f"[P] {proposer_prompt}")
-        print("-------------------------")
+# if __name__ == "__main__":
+#     task_type = TaskType.INDUCTION
+#     print("-------------------------")
+#     print(f"[TASK TYPE] {task_type}")
+#     print("-------------------------")
+#     problems = generate_problems(1, [5, 7, 11], seed=0)
+#     for problem in problems:
+#         problem.task_type = task_type
+#         solver_prompt = create_solver_prompt(problem)
+#         proposer_prompt = create_proposer_prompt(problem, num_io_pairs=5)
+#         print(f"[S] {solver_prompt}")
+#         print("-------------------------")
+#         print(f"[P] {proposer_prompt}")
+#         print("-------------------------")

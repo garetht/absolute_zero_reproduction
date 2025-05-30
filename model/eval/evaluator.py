@@ -49,6 +49,8 @@ class Evaluator:
 
         start_time = time.time()
         # Use generate_response_bulk instead of model.generate
+
+
         responses, logprobs, gen_ids, prompt_ids, attention_masks = generate_response_bulk(
             self.args,
             self.model,
@@ -90,9 +92,6 @@ class Evaluator:
                         correct_answer % problem.prime
                 )
 
-        print(
-            f"""{"✅" if is_correct else "⛔"} | Problem {problem} | Model Response {extracted_answer}"""
-        )
 
         return {
             "problem": str(problem),
@@ -118,7 +117,10 @@ class Evaluator:
         )
 
         current_overall_accuracy = overall_correct / total_processed
-        current_responded_accuracy = overall_correct / (total_processed - no_responses)
+        if total_processed > no_responses:
+            current_responded_accuracy = overall_correct / (total_processed - no_responses)
+        else:
+            current_responded_accuracy = 0.0
 
         print(
             f"📊 Overall progress: {overall_correct}/{total_processed} correct ({current_overall_accuracy:.1%}) ({current_responded_accuracy:.1%} of responded)"
