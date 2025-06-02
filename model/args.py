@@ -22,35 +22,21 @@ class AZRArgs:
 
     # Optimization hyperparameters
     max_grad_norm: float = 1.0
-    warmup_steps: int = 20
-    final_scale: float = 0.1
-
-    # FROM THE PAPER!!
 
     # Base model & sampling arguments
     base_model: str = constants.MODEL_NAME
-    gen_len: int = 30
-    prepend_bos: bool = True
 
     # Model Configuration
     max_prompt_length: int = 128
     max_response_length: int = 256
-    seed_batch_factor: int = 4
-    max_programs: int = 16384
 
     # Training Settings
     lr: float = 1e-6 
     grad_clip: float = 1.0
-    total_steps: int = 500
 
     # RL Settings
-    entropy_coefficient: float = 0.001
-    ppo_epochs: int = 1
-    n_rollouts: int = 1
     rollout_temperature: float = 1.0
     rollout_top_p: float = 1.0
-    k_references: int = 6
-    n_samples_to_estimate_task_accuracy: int = 8
     # our params
     n_minibatches: int = 2  # Reduced from 4
     minibatch_size: int = 4  # Reduced from 8
