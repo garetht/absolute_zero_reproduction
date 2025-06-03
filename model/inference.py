@@ -9,7 +9,7 @@ from model.args import AZRArgs
 
 
 
-def generate_without_grads(model: torch.nn.Module, inputs: BatchEncoding, tokenizer: PreTrainedTokenizerFast, max_new_tokens: int, device: torch.device) -> \
+def generate_without_grads(model: AutoModelForCausalLM, inputs: BatchEncoding, tokenizer: PreTrainedTokenizerFast, max_new_tokens: int, device: torch.device) -> \
         tuple[Int[torch.Tensor, "batch_size max_response_len"], Float[torch.Tensor, "batch_size max_response_len"]]:
     """
     Generate text completions without computing gradients.
@@ -28,28 +28,28 @@ def generate_without_grads(model: torch.nn.Module, inputs: BatchEncoding, tokeni
     """
 
 
-        outputs = model.generate(
-            inputs.input_ids.to(DEVICE),
-            attention_mask=inputs.attention_mask.to(DEVICE),
-            max_new_tokens=max_new_tokens,
-            do_sample=True,
-            pad_token_id=tokenizer.pad_token_id,
-            return_dict_in_generate=True,
-            output_scores=True,
-            use_cache=True,
-        )
-        generated_ids = outputs.sequences[:, inputs.input_ids.shape[1] :]
+    outputs = model.generate(
+        inputs.input_ids.to(DEVICE),
+        attention_mask=inputs.attention_mask.to(DEVICE),
+        max_new_tokens=max_new_tokens,
+        do_sample=True,
+        pad_token_id=tokenizer.pad_token_id,
+        return_dict_in_generate=True,
+        output_scores=True,
+        use_cache=True,
+    )
+    generated_ids = outputs.sequences[:, inputs.input_ids.shape[1] :]
 
 
-        scores = torch.stack(outputs.scores, dim=1)
-        logprobs = torch.log_softmax(scores, dim=-1)
-        
-        logprobs_per_token = logprobs.gather(
-            dim=-1,
-            index=generated_ids.unsqueeze(-1)
-        ).squeeze(-1)
+    scores = torch.stack(outputs.scores, dim=1)
+    logprobs = torch.log_softmax(scores, dim=-1)
+    
+    logprobs_per_token = logprobs.gather(
+        dim=-1,
+        index=generated_ids.unsqueeze(-1)
+    ).squeeze(-1)
 
-        return generated_ids, logprobs_per_token
+    return generated_ids, logprobs_per_token
 
 
 
