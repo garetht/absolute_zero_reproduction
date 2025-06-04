@@ -15,13 +15,11 @@ from tqdm.auto import tqdm   # NEW
 from buffer.base_buff import BaseBuffer, MegaBuffer
 from constants import DEVICE
 from custom_types import MiniBatch, TaskType, Role, IOPair, Answer, Problem
-from david.sampler import generate_with_logprobs
 from model.args import AZRArgs
 from model.compute.advantages import compute_advantages
 from model.compute.reward import compute_r_total
 from model.eval.prime_inversion import generate_problems, PRIMES
-from model.inference import generate_response, generate_response_bulk, \
-    generate_response_bulk_with_grads
+from model.inference import generate_response_bulk, generate_with_logprobs
 from model.eval.baselines import run_baseline_evaluation_prime_samples
 
 from utils.string_formatting import validate_proposer_formatting_and_correctness, \
@@ -81,7 +79,7 @@ class AZRTrainer:
         self.run_name = run_name
 
     def compute_azr_objective(self, advantages: Float[torch.Tensor, "role task minibatch_size"],
-                              new_logprobs: Float[torch.Tensor, "role task minibatch_size seq_len"],
+                              new_logprobs: Float[torch.Tensor, "role task minibatch_size max_response_len"],
                               minibatch: MiniBatch) -> Float[torch.Tensor, ""]:
         """
         Compute the AZR training objective.
@@ -99,7 +97,7 @@ class AZRTrainer:
         logprob_diff = new_logprobs - old_logprobs
         logprob_diff = torch.clamp(logprob_diff, min=-10.0, max=10.0)  # Prevent extreme values
         
-        importance_ratio = logprob_diff.exp()  # shape: (role, task, minibatch_size, seq_len)
+        importance_ratio = logprob_diff.exp()  # shape: (role, task, minibatch_size, max_response_len)
         
         # Check importance ratio
         if torch.isnan(importance_ratio).any() or torch.isinf(importance_ratio).any():
@@ -107,7 +105,7 @@ class AZRTrainer:
             print(f"importance_ratio stats: min={importance_ratio.min()}, max={importance_ratio.max()}, mean={importance_ratio.mean()}")
 
         # Apply attention masks to zero out padded positions
-        attention_masks = minibatch.attention_masks.float()  # shape: (role, task, minibatch_size, seq_len)
+        attention_masks = minibatch.attention_masks.float()  # shape: (role, task, minibatch_size, max_response_len)
         masked_importance_ratio = importance_ratio * attention_masks
 
         unsqueezed_advantages = advantages.unsqueeze(-1)
@@ -117,10 +115,10 @@ class AZRTrainer:
             print(f"WARNING: NaN/inf detected in advantages")
             print(f"advantages stats: min={advantages.min()}, max={advantages.max()}, mean={advantages.mean()}")
         
-        non_clipped = unsqueezed_advantages * masked_importance_ratio  # shape: (role, task, minibatch_size, seq_len, )
+        non_clipped = unsqueezed_advantages * masked_importance_ratio  # shape: (role, task, minibatch_size, max_response_len)
         # compute the clipped objective
         clipped = unsqueezed_advantages.clamp(-self.args.clip_ratio,
-                                   self.args.clip_ratio) * masked_importance_ratio  # shape: (role, task, minibatch_size, seq_len,
+                                   self.args.clip_ratio) * masked_importance_ratio  # shape: (role, task, minibatch_size, max_response_len)
 
 
 
