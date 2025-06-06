@@ -2,10 +2,19 @@ import torch
 from model.args import AZRArgs
 from jaxtyping import Float
 from torch import Tensor
-"""
-Computes the normalized advantage of the model's answer
-"""
+
+
 def compute_advantages(args: AZRArgs, rewards: Float[Tensor, "role task minibatch_size"]) -> Float[Tensor, "role task minibatch_size"]:
+    """
+    Compute normalized advantages from rewards for policy gradient training.
+    
+    Args:
+        args: AZRArgs object containing eps parameter for numerical stability
+        rewards: Shape (role, task, minibatch_size) - Raw rewards for each role/task/sample
+        
+    Returns:
+        Shape (role, task, minibatch_size) - Normalized advantages (mean-centered, std-normalized)
+    """
     # If we only have one item in the last dimension, just return the rewards directly
     if rewards.size(-1) == 1:
         return rewards

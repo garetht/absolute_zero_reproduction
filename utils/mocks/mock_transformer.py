@@ -86,6 +86,9 @@ class MockAutoModelForCausalLM:
         """Set model to training mode"""
         return self
 
+    def named_parameters(self) -> list:
+        return []
+
     def generate(
             self,
             input_ids: torch.Tensor,

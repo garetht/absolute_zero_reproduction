@@ -187,11 +187,10 @@ class EvaluationResults(TypedDict):
     total_eval_time_seconds: float
     accuracy: float
 
-
 @dataclass
 class MiniBatch:
     samples: list[Problem]
-    sample_ids: Int[Tensor, "role task minibatch_size seq_len"]
-    logprobs: Float[Tensor, "role task minibatch_size max_response_length"]
-    attention_masks: Int[Tensor, "role task minibatch_size seq_len"]
+    sample_ids: Int[Tensor, "role task minibatch_size max_response_len"]
+    logprobs: Float[Tensor, "role task minibatch_size max_response_len"]
+    attention_masks: Int[Tensor, "role task minibatch_size max_response_len"]
     rewards: Float[Tensor, "role task minibatch_size"]
