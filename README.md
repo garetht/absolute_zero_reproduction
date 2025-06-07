@@ -24,6 +24,85 @@ We followed the Absolute Zero paper in training on a model in the `Qwen/Qwen2.5-
 
 We ran this training on Nvidia A100s in a cloud-provisioned instance on RunPod.
 
+## Training Flow
+
+```mermaid
+flowchart TD
+%% Entry and setup
+    A1[train.py]
+    A2[Setup model, tokenizer, optimizer, buffer, trainer]
+    A3[Repeat: training phase N times]
+
+%% Rollout phase
+    B1[Sample problems from buffer]
+    B2[Generate proposer prompts]
+    B3[Model generates proposer responses]
+    B4[Validate proposer responses]
+    B5[Store valid proposer problems]
+    B6[Generate solver prompts]
+    B7[Model generates solver responses]
+    B8[Validate solver responses]
+    B9[Compute rewards proposer, solver]
+    B10[Store logprobs, rewards in buffer]
+
+    %% Learning phase
+    C1[Sample minibatch from buffer]
+    C2[Compute advantages proposer, solver]
+    C3[Compute loss proposer, solver]
+    C4[Backpropagation]
+    C5[Optimizer step]
+    C6[Evaluate and log metrics]
+    
+    %% Connections
+    A1 --> A2 --> A3
+    A3 --> B1
+    B1 --> B2 --> B3 --> B4 --> B5
+    B5 --> B6 --> B7 --> B8 --> B9 --> B10
+    B10 --> C1
+    C1 --> C2 --> C3 --> C4 --> C5 --> C6
+    C6 --> A3
+    
+    %% Roles
+    B2 -.->|Proposer| B3
+    B6 -.->|Solver| B7
+    C2 -.->|Both roles| C3
+    C3 -.->|Both roles| C4
+    
+    %% RL Computation
+    C2 --- D1[compute_advantages]
+    B9 --- D2[compute_r_total]
+```
+
 ## Repository Layout
 
+- `custom_types.py` - Core data structures and type definitions used throughout the codebase, including representations for problems, answers, batches, and enums for task types and roles.
 
+- `constants.py` - Global constants such as model names, directory paths, device selection logic, and problem parameters (e.g., maximum prime).
+
+- `prompts.py` - Prompt templates and prompt-generation utilities, including those adapted from the original Absolute Zero paper, for constructing tasks and evaluating model outputs.
+
+- `prime_inversion.py` - Core logic for generating and validating modular inverse problems, including a list of primes and utility functions.
+
+- `model/` - Main directory for model training, inference, and evaluation logic:
+  - `train.py` - Entry point for training runs, including checkpointing and logging.
+  - `trainer.py` - Implements the main training loop and AZRTrainer class, handling rollouts, learning, and objective computation.
+  - `inference.py` - Utilities for generating model outputs and log probabilities in batch, with and without gradients.
+  - `args.py` - Defines the AZRArgs dataclass for all training and evaluation hyperparameters.
+  - `eval/` - Evaluation submodule:
+    - `baselines.py` - Scripts and functions for running baseline evaluations on models and random problems.
+    - `evaluator.py` - Batch evaluation logic, accuracy computation, and result reporting.
+
+- `compute/` - RL computation utilities:
+  - `advantages.py` - Computes advantages for policy gradient updates.
+  - `reward.py` - Computes reward signals for training.
+
+- `buffer/` - Implements experience buffer logic for RL:
+  - `base_buff.py` - Main buffer classes for storing and batching training samples, including logic for minibatching and seed buffer management.
+
+- `utils/` - Utility functions and helpers:
+  - `string_formatting.py` - Prompt formatting, parsing, and validation utilities for modular inverse problems and model responses.
+  - `validate_by_executing.py` - Intended for validating problem correctness by executing code.
+  - `debug_grads.py` - Simple function for printing PyTorch tensor gradient information.
+  - `mocks/` - Contains mock classes for testing:
+    - `mock_transformer.py` - Implements mock versions of HuggingFace model and config classes for fast, dependency-free testing.
+- `tests/` - Unit tests for core modules and utilities, including tests for rewards, string formatting, buffer logic, and prime inversi
