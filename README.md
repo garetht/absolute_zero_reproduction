@@ -1,4 +1,4 @@
-# Reinforced Self-play Reasoning with Zero Data
+# Absolute Zero: Reinforced Self-play Reasoning with Zero Data
 
 This is a reproduction of the method of reinforcement learning (self-play with task-relative REINFORCE++) used in the paper [Absolute Zero: Reinforced Self-play Reasoning with Zero Data](https://arxiv.org/abs/2505.03335?context=cs.LG). Our setup differs in that instead of generating Python programs as the paper does, we instead adapt the setup to the prime inversion problem.
 
