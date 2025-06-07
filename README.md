@@ -29,16 +29,16 @@ We ran this training on Nvidia A100s in a cloud-provisioned instance on RunPod.
 Over 200 RL training steps, we saw sharp increases in the capability of our proposer for all three problem types – abduction, induction and deduction – over the last twenty steps, as expected.
 
 <p align="center">
-  <img src="./diagrams/proposer_abduction.png" width="33%">
-  <img src="./diagrams/proposer_induction.png" width="33%">
-  <img src="./diagrams/proposer_deduction.png" width="33%">
+  <img src="diagrams/proposer_abduction.png" width="33%">
+  <img src="diagrams/proposer_induction.png" width="33%">
+  <img src="diagrams/proposer_deduction.png" width="33%">
 </p>
 
 
 We also saw the accuracy of our solver increase by about 10 percentage points during the first 125 steps, although progress remained uneven after that. The drop in the accuracy of the solver coincided with the proposers being able to more successfully propose problems at step 180, although we have not yet been able to fully account for the drop.
 
 <p align="center">
-  <img src="./diagrams/accuracy.png" width="50%"/>
+  <img src="diagrams/accuracy.png" width="50%"/>
 </p>
 
 ## Training Flow
