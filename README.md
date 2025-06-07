@@ -25,17 +25,17 @@ and we can determine that, uniquely, $x \equiv 2 \pmod{7}$ in this example.
 
 The abduction and induction tasks are determined in the same way, where the solver has to solve for $y$ and $p$ respectively. Like the induction task in the paper, multiple primes are possible, and we will accept any of those that fulfill the task for a given $x$ and $y$.
 
-We can control the computational difficulty of the problem by increasing the size of possible $p$ candidates. This makes this problem more amenable to RL since we are able to tune the problem difficulty to match the initial capability of the model.
+We can control the computational difficulty of the problem by increasing the size of possible $p$ candidates. This makes the problem more amenable to RL since we are able to tune the problem difficulty to match the initial capability of the model.
 
 ## Setup
 
 We followed the Absolute Zero paper in training on a model in the `Qwen/Qwen2.5-3B` series, but we started with `Qwen/Qwen2.5-3B-Instruct` instead of a base model, because we found it unproductive to attempt to instruct the base model to respond in a parseable format for us to correctly reward it and bootstrap its learning.
 
-We ran this training on Nvidia A100s in a cloud-provisioned instance on RunPod.
+We ran this training on a cluster of eight Nvidia A100s in a cloud-provisioned instance on RunPod.
 
 ## Results
 
-Over 200 RL training steps, we saw sharp increases in the capability of our proposer for all three problem types – abduction, induction and deduction – over the last twenty steps, as expected.
+At the end of 200 RL training steps (during the last twenty steps), we saw a sharp increase in the capability of our proposer for all three problem types – abduction, induction and deduction.
 
 <p align="center">
   <img src="diagrams/proposer_abduction.png" width="33%">
@@ -104,8 +104,6 @@ flowchart TD
 - `custom_types.py` - Core data structures and type definitions used throughout the codebase, including representations for problems, answers, batches, and enums for task types and roles.
 
 - `constants.py` - Global constants such as model names, directory paths, device selection logic, and problem parameters (e.g., maximum prime).
-
-- `prompts.py` - Prompt templates and prompt-generation utilities, including those adapted from the original Absolute Zero paper, for constructing tasks and evaluating model outputs.
 
 - `prime_inversion.py` - Core logic for generating and validating modular inverse problems, including a list of primes and utility functions.
 
