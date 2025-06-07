@@ -31,7 +31,7 @@ We can control the computational difficulty of the problem by increasing the siz
 
 We followed the Absolute Zero paper in training on a model in the `Qwen/Qwen2.5-3B` series, but we started with `Qwen/Qwen2.5-3B-Instruct` instead of a base model, because we found it unproductive to attempt to instruct the base model to respond in a parseable format for us to correctly reward it and bootstrap its learning.
 
-We ran this training on a cluster of eight Nvidia A100s in a cloud-provisioned instance on RunPod.
+We ran the training on a single Nvidia A100 in a cloud-provisioned instance on RunPod.
 
 ## Results
 
