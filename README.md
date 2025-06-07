@@ -2,6 +2,15 @@
 
 This is a reproduction of the method of reinforcement learning (self-play with task-relative REINFORCE++) used in the paper [Absolute Zero: Reinforced Self-play Reasoning with Zero Data](https://arxiv.org/abs/2505.03335?context=cs.LG). Our setup differs in that instead of generating Python programs as the paper does, we instead adapt the setup to the prime inversion problem.
 
+*The Absolute Zero Paradigm diagram from the original paper:*
+
+<p align="center">
+  <br/>
+  <img src="diagrams/azr.png" width="75%">
+  <br/>
+</p>
+
+
 ## Problem
 
 Our project attempts to teach the model the equation
@@ -35,7 +44,7 @@ Over 200 RL training steps, we saw sharp increases in the capability of our prop
 </p>
 
 
-We also saw the accuracy of our solver increase by about 10 percentage points during the first 125 steps, although progress remained uneven after that. The drop in the accuracy of the solver coincided exactly with the proposers being able to more successfully propose problems at step 180, although we have not yet been able to fully account for the drop.
+We also saw the accuracy of our solver increase by about 10 percentage points during the first 125 steps, although progress remained uneven after that. The drop in the accuracy of the solver coincided exactly with the proposers being able to more successfully propose problems at step 180, although we have not yet been able to fully account for the drop, which we will leave to future work.
 
 <p align="center">
   <img src="diagrams/accuracy.png" width="50%"/>
@@ -122,4 +131,8 @@ flowchart TD
   - `debug_grads.py` - Simple function for printing PyTorch tensor gradient information.
   - `mocks/` - Contains mock classes for testing:
     - `mock_transformer.py` - Implements mock versions of HuggingFace model and config classes for fast, dependency-free testing.
-- `tests/` - Unit tests for core modules and utilities, including tests for rewards, string formatting, buffer logic, and prime inversi
+- `tests/` - Unit tests for core modules and utilities, including tests for rewards, string formatting, buffer logic, and prime inversion
+
+## Future Work
+
+We plan to continue working on this repository and make improvements. We plan to add more logging, increase parallelization, and eventually implement the original Python-solving task that was described in the original paper.
