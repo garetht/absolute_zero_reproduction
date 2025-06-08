@@ -29,8 +29,8 @@ def generate_without_grads(model: AutoModelForCausalLM, inputs: BatchEncoding, t
 
 
     outputs = model.generate(
-        inputs.input_ids.to(DEVICE),
-        attention_mask=inputs.attention_mask.to(DEVICE),
+        inputs.input_ids.to(device),
+        attention_mask=inputs.attention_mask.to(device),
         max_new_tokens=max_new_tokens,
         do_sample=True,
         pad_token_id=tokenizer.pad_token_id,
@@ -97,8 +97,9 @@ def generate_response_bulk(
     )
 
     # Generate responses
+    device = next(model.parameters()).device  # Get device from model
     generated_ids, logprobs = generate_without_grads(
-        model, inputs, tokenizer, args.max_response_length, DEVICE
+        model, inputs, tokenizer, args.max_response_length, device
     )
 
     # Extract generated tokens (excluding input tokens), shape (batch_size, actual_length)
@@ -189,7 +190,8 @@ def generate_with_logprobs(model: AutoModelForCausalLM,
 
     prompt_len = inputs.input_ids.shape[1]
 
-    inputs = inputs.to(DEVICE)
+    device = next(model.parameters()).device  # Get device from model
+    inputs = inputs.to(device)
 
     input_ids = model.generate(**inputs,
                                max_new_tokens=args.max_response_length,

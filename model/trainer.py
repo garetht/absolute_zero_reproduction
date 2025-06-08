@@ -55,7 +55,9 @@ class AZRTrainer:
     def __init__(self, args: AZRArgs, mega_buffer: MegaBuffer,
                  tokenizer: PreTrainedTokenizerFast,
                  optimizer: torch.optim.Optimizer,
-                 training_model: AutoModelForCausalLM, run_name: str):
+                 training_model: AutoModelForCausalLM, 
+                 accelerator,  # Type: accelerate.Accelerator
+                 run_name: str):
         """
         Initializes a new training instance with the provided configuration and components.
 
@@ -68,12 +70,14 @@ class AZRTrainer:
         :param tokenizer: Pre-trained tokenizer for text processing and encoding
         :param optimizer: PyTorch optimizer for model parameter updates
         :param training_model: Causal language model to be trained
+        :param accelerator: Accelerate.Accelerator for multi-GPU training
         :param run_name: Identifier string for the current training run
         """
         self.args = args
         self.training_model = training_model
         self.tokenizer = tokenizer
         self.optimizer = optimizer
+        self.accelerator = accelerator
         self.mega_buffer = mega_buffer
         self.step = 0
         self.run_name = run_name
@@ -320,7 +324,7 @@ class AZRTrainer:
                 continue
         
 
-            objective.backward()
+            self.accelerator.backward(objective)
             
             # Check for NaN/inf in gradients
             has_nan_grad = False
@@ -335,14 +339,17 @@ class AZRTrainer:
                 self.optimizer.zero_grad()
                 continue
             
-            torch.nn.utils.clip_grad_norm_(self.training_model.parameters(), self.args.max_grad_norm)
+            # Use accelerator's clip_grad_norm_ for proper multi-GPU handling
+            if self.accelerator.sync_gradients:
+                self.accelerator.clip_grad_norm_(self.training_model.parameters(), self.args.max_grad_norm)
             
             self.optimizer.step()
             # self.optimizer.zero_grad()
             del new_logprobs, new_attention_masks, advantages, objective
             # Clear CUDA cache periodically to free memory
             if mb_idx % 2 == 0:  # Every 2 minibatches
-                torch.cuda.empty_cache()
+                if self.accelerator.device.type == "cuda":
+                    torch.cuda.empty_cache()
                 gc.collect()  # Also run garbage collection to free CPU memory
 
             # Evaluate after gradient update
@@ -357,8 +364,8 @@ class AZRTrainer:
             print(f"Minibatch accuracy: {eval_results['accuracy']:.2%}")
             total_accuracy += eval_results['accuracy']
             
-            # Log metrics to wandb if enabled
-            if self.args.use_wandb:
+            # Log metrics to wandb if enabled (only on main process)
+            if self.args.use_wandb and self.accelerator.is_main_process:
                 # Log accuracy
                 wandb.log({"minibatch_accuracy": eval_results['accuracy']}, step=self.step)
 
@@ -375,12 +382,13 @@ class AZRTrainer:
             tqdm.write(f"✅ Completed minibatch {mb_idx} (global step {self.step})")
             
         # Final cleanup after all minibatches
-        torch.cuda.empty_cache()
+        if self.accelerator.device.type == "cuda":
+            torch.cuda.empty_cache()
         gc.collect()
         
         total_accuracy /= self.args.n_minibatches
         tqdm.write(f"Average accuracy for learning phase: {total_accuracy:.2%}")
-        # write to wandb
-        if self.args.use_wandb:
+        # write to wandb (only on main process)
+        if self.args.use_wandb and self.accelerator.is_main_process:
             wandb.log({"learning_phase_accuracy": total_accuracy}, step=self.step)
         return total_accuracy

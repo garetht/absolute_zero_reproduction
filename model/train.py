@@ -1,17 +1,18 @@
 from datetime import datetime
 import torch
 import os, tempfile
-import wandb                               # NEW
+import wandb
+from accelerate import Accelerator
 from transformers import AutoTokenizer, AutoModelForCausalLM
-from safetensors.torch import save_file   # NEW
+from safetensors.torch import save_file
 from tqdm import tqdm
 from buffer.base_buff import MegaBuffer
-from constants import CHECKPOINT_DIR, MODEL_NAME, DEVICE
+from constants import CHECKPOINT_DIR, MODEL_NAME
 from custom_types import Role, TaskType
 from model.args import AZRArgs
 from model.trainer import AZRTrainer
 from utils.mocks.mock_transformer import MockAutoModelForCausalLM
-import gc  # Import garbage collector
+import gc
 
 
 # ---------------------------------------------------------------------------
@@ -24,14 +25,25 @@ def save_model_checkpoint(model, path: str):
 
 
 def main():
+    # Initialize Accelerator first
+    accelerator = Accelerator(
+        gradient_accumulation_steps=1,
+        mixed_precision="bf16",  # Use bfloat16 for better performance
+        log_with="wandb" if True else None,  # Will be configured later
+    )
+    
     wandb_project_name = "AZR"
     use_mock = False
     run_name = f"AZR-Run-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
 
+    # Load model without device_map when using Accelerator
     if use_mock:
         model = MockAutoModelForCausalLM()
     else:
-        model = AutoModelForCausalLM.from_pretrained(MODEL_NAME, device_map=DEVICE)
+        model = AutoModelForCausalLM.from_pretrained(
+            MODEL_NAME,
+            torch_dtype=torch.bfloat16,  # Use bfloat16 for memory efficiency
+        )
 
     args = AZRArgs(
         wandb_project_name=wandb_project_name,
@@ -50,10 +62,14 @@ def main():
 
     optimizer = torch.optim.AdamW(
         model.parameters(),
-        lr=args.lr,  # do we want to set beta?
+        lr=args.lr,
     )
 
+    # Prepare model and optimizer with Accelerator
+    model, optimizer = accelerator.prepare(model, optimizer)
 
+    # Create buffers on accelerator device
+    device = accelerator.device
     mega_buffer = MegaBuffer(
         args=args,
         logprobs=torch.empty(
@@ -63,7 +79,7 @@ def main():
                 args.batch_size,
                 args.max_response_length,
             ),
-            device=DEVICE,
+            device=device,
             dtype=args.dtype,
         ),
         sample_ids=torch.empty(
@@ -74,7 +90,7 @@ def main():
                 args.max_response_length,
             ),
             dtype=torch.int,
-            device=DEVICE,
+            device=device,
         ),
         attention_masks=torch.ones(
             (
@@ -84,7 +100,7 @@ def main():
                 args.max_response_length,
             ),
             dtype=torch.int,
-            device=DEVICE,
+            device=device,
         ),
     )
     mega_buffer.initialize_seed_buffer(tokenizer)
@@ -95,12 +111,13 @@ def main():
         tokenizer=tokenizer,
         training_model=model,
         optimizer=optimizer,
+        accelerator=accelerator,
         run_name=args.run_name,
     )
  
     # -------- WandB run ------------------------------------------------------
     wandb_run = None
-    if args.use_wandb:
+    if args.use_wandb and accelerator.is_main_process:
         wandb_run = wandb.init(
             project=args.wandb_project_name,
             entity=args.wandb_entity,
@@ -126,13 +143,13 @@ def main():
         epoch += 1
         
         # Clear CUDA cache at the start of each epoch
-        if torch.cuda.is_available():
+        if accelerator.device.type == "cuda":
             torch.cuda.empty_cache()
         
         phase_accuracy = trainer.learning_phase() or getattr(trainer,
                                                              "latest_accuracy",
                                                              0.0)
-        if wandb_run:                       # log metrics
+        if wandb_run and accelerator.is_main_process:  # log metrics only on main process
             wandb_run.log({"phase": phase, "accuracy": phase_accuracy})
 
         # # -------- save current checkpoint (temp) ------------------------------
@@ -149,7 +166,7 @@ def main():
         # ...existing logging / metrics...
         
         # Clear cache after checkpoint saving
-        if torch.cuda.is_available():
+        if accelerator.device.type == "cuda":
             torch.cuda.empty_cache()
             gc.collect()  # Force garbage collection
 
@@ -157,10 +174,11 @@ def main():
     # print(f"Best checkpoint saved to: {best_ckpt_path}")
     # --------------------------------------------------------------------------
 
-    if wandb_run:                           # close run
+    if wandb_run and accelerator.is_main_process:  # close run only on main process
         wandb_run.finish()
 
-    print("Training completed and best model checkpoint saved locally.")
+    if accelerator.is_main_process:
+        print("Training completed and best model checkpoint saved locally.")
 
 if __name__ == "__main__":
     main()
