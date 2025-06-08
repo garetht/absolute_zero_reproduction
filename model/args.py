@@ -16,6 +16,10 @@ class AZRArgs:
     use_wandb: bool = True
     wandb_project_name: str = "AZR"
     wandb_entity: str | None = None
+    
+    # HuggingFace Hub
+    push_to_hub: bool = True
+    hub_repo_prefix: str = "azr"  # Will create repos like "azr-run-20241201-123456"
 
     # Duration of different phases
     total_phases: int = 10

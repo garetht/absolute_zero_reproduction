@@ -16,11 +16,58 @@ import gc
 
 
 # ---------------------------------------------------------------------------
-# Helper to robustly save checkpoints (avoids zip-writer bug & GPU tensors)
-def save_model_checkpoint(model, path: str):
-    """Save model.state_dict() on CPU in the .safetensors format."""
-    state_dict_cpu = {k: v.detach().to("cpu") for k, v in model.state_dict().items()}
-    save_file(state_dict_cpu, path)      # safetensors write
+# Helper to robustly save checkpoints with accelerator support
+def save_model_checkpoint(accelerator: Accelerator, model, tokenizer, path: str, is_best: bool = False):
+    """Save model, tokenizer, and training state using accelerator."""
+    if accelerator.is_main_process:
+        # Save the model and tokenizer
+        unwrapped_model = accelerator.unwrap_model(model)
+        unwrapped_model.save_pretrained(path)
+        tokenizer.save_pretrained(path)
+        
+        # Save additional metadata
+        metadata = {
+            "is_best": is_best,
+            "timestamp": datetime.now().isoformat(),
+        }
+        
+        import json
+        with open(os.path.join(path, "training_metadata.json"), "w") as f:
+            json.dump(metadata, f, indent=2)
+            
+        print(f"✅ Saved {'best ' if is_best else ''}checkpoint to {path}")
+
+def push_to_hub_if_configured(accelerator: Accelerator, model, tokenizer, repo_name: str, commit_message: str):
+    """Push model to HuggingFace Hub if configured."""
+    if not accelerator.is_main_process:
+        return
+        
+    try:
+        from huggingface_hub import HfApi
+        
+        # Check if we can access the hub (will raise if not logged in)
+        api = HfApi()
+        user_info = api.whoami()
+        
+        if user_info:
+            print(f"🚀 Pushing model to HuggingFace Hub as {repo_name}...")
+            unwrapped_model = accelerator.unwrap_model(model)
+            unwrapped_model.push_to_hub(
+                repo_name,
+                commit_message=commit_message,
+                private=False,  # Set to True if you want private repos
+            )
+            tokenizer.push_to_hub(
+                repo_name,
+                commit_message=commit_message,
+            )
+            print(f"✅ Successfully pushed to https://huggingface.co/{user_info['name']}/{repo_name}")
+        
+    except ImportError:
+        print("⚠️  huggingface_hub not installed. Skipping push to hub.")
+    except Exception as e:
+        print(f"⚠️  Could not push to hub: {e}")
+        print("   Make sure you're logged in with: huggingface-cli login")
 # ---------------------------------------------------------------------------
 
 
@@ -126,17 +173,20 @@ def main():
         )
     # -------------------------------------------------------------------------
 
-    # --- local checkpoint directory -------------------------------------------
-    ckpt_dir = os.path.join(CHECKPOINT_DIR, run_name)
-    os.makedirs(ckpt_dir, exist_ok=True)
-    # --------------------------------------------------------------------------
-
-    tmp_dir = tempfile.gettempdir()        # still used for temp saving
-    current_ckpt_path = os.path.join(tmp_dir,  f"{run_name}_current.safetensors")
-    best_ckpt_path    = os.path.join(ckpt_dir, f"{run_name}_best.safetensors")
-
+    # --- checkpoint configuration ---------------------------------------------
+    save_checkpoints = os.path.exists(CHECKPOINT_DIR)
+    if save_checkpoints and accelerator.is_main_process:
+        ckpt_dir = os.path.join(CHECKPOINT_DIR, run_name)
+        os.makedirs(ckpt_dir, exist_ok=True)
+        current_ckpt_path = os.path.join(ckpt_dir, "current")
+        best_ckpt_path = os.path.join(ckpt_dir, "best")
+        print(f"📁 Checkpoints will be saved to: {ckpt_dir}")
+    elif accelerator.is_main_process:
+        print(f"⚠️  Checkpoint directory {CHECKPOINT_DIR} does not exist. Skipping checkpoint saving.")
+    
     # ---------- checkpoint bookkeeping ----------------------------------------
     best_accuracy = float("-inf")
+    has_saved_checkpoints = False
     # --------------------------------------------------------------------------
     epoch = 0
     for phase in tqdm(range(args.total_phases), desc=f"Epoch {epoch+1}/{args.total_phases}"):
@@ -152,33 +202,57 @@ def main():
         if wandb_run and accelerator.is_main_process:  # log metrics only on main process
             wandb_run.log({"phase": phase, "accuracy": phase_accuracy})
 
-        # # -------- save current checkpoint (temp) ------------------------------
-        # with torch.no_grad():  # Ensure no gradients during checkpoint save
-        #     save_model_checkpoint(model, current_ckpt_path)
-        #  # ----------------------------------------------------------------------
-
-        # # -------- update best checkpoint --------------------------------------
-        # if phase_accuracy > best_accuracy:
-        #     best_accuracy = phase_accuracy
-        #     with torch.no_grad():  # Ensure no gradients during checkpoint save
-        #         save_model_checkpoint(model, best_ckpt_path)
-         # ----------------------------------------------------------------------
-        # ...existing logging / metrics...
+        # -------- save checkpoints if enabled ----------------------------------
+        if save_checkpoints:
+            # Always save current checkpoint
+            with torch.no_grad():
+                save_model_checkpoint(accelerator, model, tokenizer, current_ckpt_path, is_best=False)
+                has_saved_checkpoints = True
+            
+            # Save best checkpoint if this is the best accuracy so far
+            if phase_accuracy > best_accuracy:
+                best_accuracy = phase_accuracy
+                with torch.no_grad():
+                    save_model_checkpoint(accelerator, model, tokenizer, best_ckpt_path, is_best=True)
+                
+                if accelerator.is_main_process:
+                    print(f"🏆 New best accuracy: {best_accuracy:.2%}")
+        # ----------------------------------------------------------------------
         
         # Clear cache after checkpoint saving
         if accelerator.device.type == "cuda":
             torch.cuda.empty_cache()
             gc.collect()  # Force garbage collection
 
-    # ------------------------ summary -----------------------------------------
-    # print(f"Best checkpoint saved to: {best_ckpt_path}")
+    # ------------------------ post-training actions --------------------------
+    if save_checkpoints and has_saved_checkpoints and accelerator.is_main_process:
+        print(f"📊 Training completed! Best accuracy: {best_accuracy:.2%}")
+        print(f"💾 Current checkpoint: {current_ckpt_path}")
+        print(f"🏆 Best checkpoint: {best_ckpt_path}")
+        
+        # Push best model to HuggingFace Hub if enabled
+        if args.push_to_hub:
+            repo_name = f"{args.hub_repo_prefix}-{run_name.lower()}"
+            commit_message = f"AZR model trained for {args.total_phases} phases, best accuracy: {best_accuracy:.2%}"
+            
+            try:
+                # Load the best checkpoint before pushing
+                print("📤 Loading best checkpoint for Hub upload...")
+                best_model = AutoModelForCausalLM.from_pretrained(best_ckpt_path)
+                best_tokenizer = AutoTokenizer.from_pretrained(best_ckpt_path)
+                
+                push_to_hub_if_configured(accelerator, best_model, best_tokenizer, repo_name, commit_message)
+            except Exception as e:
+                print(f"⚠️  Could not load best checkpoint for Hub upload: {e}")
+        else:
+            print("🔒 Hub upload disabled in config")
+    
+    elif accelerator.is_main_process:
+        print("Training completed (no checkpoints saved).")
     # --------------------------------------------------------------------------
 
     if wandb_run and accelerator.is_main_process:  # close run only on main process
         wandb_run.finish()
-
-    if accelerator.is_main_process:
-        print("Training completed and best model checkpoint saved locally.")
 
 if __name__ == "__main__":
     main()
