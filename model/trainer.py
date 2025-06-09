@@ -162,13 +162,16 @@ class AZRTrainer:
         abduction_prompts = [problem.get_prompt(Role.PROPOSER) for problem in abduction_problems]
         deduction_prompts = [problem.get_prompt(Role.PROPOSER) for problem in deduction_problems]
 
+        # Unwrap model for generation (handles DDP/Accelerate wrapping)
+        unwrapped_model = self.accelerator.unwrap_model(self.training_model)
+        
         # Generate responses in batches (3 bulk calls instead of 3*batch_size individual calls)
         induction_responses, induction_logprobs_bulk, induction_sample_ids_bulk, _, induction_attention_masks_bulk = generate_response_bulk(
-            self.args, self.training_model, self.tokenizer, induction_prompts)
+            self.args, unwrapped_model, self.tokenizer, induction_prompts)
         abduction_responses, abduction_logprobs_bulk, abduction_sample_ids_bulk, _, abduction_attention_masks_bulk = generate_response_bulk(
-            self.args, self.training_model, self.tokenizer, abduction_prompts)
+            self.args, unwrapped_model, self.tokenizer, abduction_prompts)
         deduction_responses, deduction_logprobs_bulk, deduction_sample_ids_bulk, _, deduction_attention_masks_bulk = generate_response_bulk(
-            self.args, self.training_model, self.tokenizer, deduction_prompts)
+            self.args, unwrapped_model, self.tokenizer, deduction_prompts)
 
         # Process responses and validation
         for batch_idx in tqdm(range(self.args.batch_size), desc="Rollout | Proposer batches"):
@@ -220,7 +223,7 @@ class AZRTrainer:
             task_prompts = [problem.get_prompt(Role.SOLVER) for problem in problems]
 
             responses, logprobs, sample_ids, prompt_ids, attention_masks = generate_response_bulk(self.args,
-                                                                                                  self.training_model,
+                                                                                                  unwrapped_model,
                                                                                                   self.tokenizer,
                                                                                                   task_prompts)
             # write logprobs to the mega buffer
@@ -286,12 +289,15 @@ class AZRTrainer:
                 device=DEVICE, dtype=torch.int
             )
 
+            # Unwrap model for generation
+            unwrapped_model = self.accelerator.unwrap_model(self.training_model)
+            
             for role in Role:
                 prompts = [problem.get_prompt(role) for problem in mini_batch.samples]
 
                 # correct signature: (model, tokenizer, prompts, args)
                 completion_ids, attention_masks, logprobs = generate_with_logprobs(
-                    self.training_model,
+                    unwrapped_model,
                     self.tokenizer,
                     prompts,
                     self.args,
