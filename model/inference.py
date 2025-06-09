@@ -28,7 +28,12 @@ def generate_without_grads(model: AutoModelForCausalLM, inputs: BatchEncoding, t
     """
 
 
-    outputs = model.generate(
+    # Unwrap model if it's wrapped by DDP/Accelerate
+    unwrapped_model = model
+    if hasattr(model, 'module'):
+        unwrapped_model = model.module
+
+    outputs = unwrapped_model.generate(
         inputs.input_ids.to(device),
         attention_mask=inputs.attention_mask.to(device),
         max_new_tokens=max_new_tokens,
@@ -193,14 +198,19 @@ def generate_with_logprobs(model: AutoModelForCausalLM,
     device = next(model.parameters()).device  # Get device from model
     inputs = inputs.to(device)
 
-    input_ids = model.generate(**inputs,
+    # Unwrap model if it's wrapped by DDP/Accelerate
+    unwrapped_model = model
+    if hasattr(model, 'module'):
+        unwrapped_model = model.module
+
+    input_ids = unwrapped_model.generate(**inputs,
                                max_new_tokens=args.max_response_length,
                                use_cache=True,
                                do_sample=True,
                                top_p=args.rollout_top_p,
                                temperature=args.rollout_temperature)
 
-    logits = model(input_ids).logits
+    logits = unwrapped_model(input_ids).logits
 
     if debug:
         print(f"{logits.shape=}")
