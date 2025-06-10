@@ -360,8 +360,12 @@ class AZRTrainer:
 
             # Evaluate after gradient update
             with torch.no_grad():
+                eval_model = self.accelerator.unwrap_model(self.training_model)
                 eval_results = run_baseline_evaluation_prime_samples(
-                    self.args, self.training_model, self.tokenizer, generate_problems(
+                    self.args,
+                    eval_model, # Pass the unwrapped model
+                    self.tokenizer,
+                    generate_problems(
                         n = min(self.args.batch_size, 16),
                         primes=PRIMES[7:14],
                         seed=self.args.seed

@@ -149,6 +149,7 @@ def main():
             dtype=torch.int,
             device=device,
         ),
+        accelerator=accelerator,  # Pass accelerator to MegaBuffer
     )
     mega_buffer.initialize_seed_buffer(tokenizer)
 

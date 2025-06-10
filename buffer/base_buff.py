@@ -30,28 +30,21 @@ class MegaBuffer:
     def __init__(
         self,
         args: AZRArgs,
-        logprobs: Int[Tensor, "role task batch_size max_response_len"],
-        sample_ids: Int[Tensor, "role task batch_size max_response_len"],
-        attention_masks: Int[Tensor, "role task batch_size max_response_len"] = None,
-        rewards: Float[Tensor, "role task batch_size"] = None,
+        logprobs: Float[torch.Tensor, "role task batch_size max_response_len"],
+        sample_ids: Int[torch.Tensor, "role task batch_size max_response_len"],
+        attention_masks: Int[torch.Tensor, "role task batch_size max_response_len"] = None,
+        accelerator=None,  # Add accelerator parameter
     ):
         self.args = args
-        self.seed_buffer: list[Problem] = []
         self.logprobs = logprobs
         self.sample_ids = sample_ids
-        # Initialize attention masks if not provided
-        if attention_masks is None:
-            self.attention_masks = torch.ones_like(sample_ids)
-        else:
-            self.attention_masks = attention_masks
-        # Initialize rewards if not provided
-        if rewards is None:
-            self.rewards = torch.zeros((len(Role), len(TaskType), args.batch_size), 
-                                     dtype=logprobs.dtype, device=logprobs.device)
-        else:
-            self.rewards = rewards
+        self.attention_masks = attention_masks if attention_masks is not None else torch.ones_like(sample_ids)
+        self.accelerator = accelerator  # Store accelerator
+        
+        self.rewards = torch.zeros((len(Role), len(TaskType), args.batch_size), device=logprobs.device)
         # batch_size is the index of the sample in the buffer, same for any role task combo
         self.buffer: list[Problem] = []
+        self.seed_buffer: list[Problem] = [] # Initialize seed_buffer
 
     def get_minibatches(self, model=None, tokenizer=None) -> list[MiniBatch]:
         # Combine buffer and seed_buffer if needed to reach batch_size
@@ -256,6 +249,10 @@ class MegaBuffer:
         from tqdm import tqdm
         import itertools
 
+        # Unwrap model if using accelerator
+        if self.accelerator is not None:
+            model = self.accelerator.unwrap_model(model)
+        
         n_seeds = len(seed_entries)
         
         # Initialize output tensors
